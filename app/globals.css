@@ -1,0 +1,567 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Design tokens
+
+   The brand trio (--brand, --brand-ink, --brand-soft) is injected per request
+   from the shop's colour in the DB. See lib/color.ts for the contrast math.
+   ========================================================================== */
+
+@theme {
+  /* Motion. Custom curves, because the built-in CSS easings are too weak to
+     read as intentional. No `ease-in` anywhere: it delays the exact moment the
+     user is watching. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* Overshoot, for the few genuinely celebratory moments (a picked star, a
+     finished draft). Reserved: using it on ordinary UI reads as bouncy. */
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Radii and spacing rhythm. */
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+
+  /* Type scale, mobile-first. */
+  --text-hero: 1.75rem;
+  --text-body: 1rem;
+  --text-caption: 0.8125rem;
+}
+
+:root {
+  /* Fallbacks. Overridden inline on the shop page from the DB value. */
+  --brand: #245c47;
+  --brand-ink: #245c47;
+  --brand-soft: #ebf2ef;
+  --on-brand: #ffffff;
+
+  --surface: #ffffff;
+  --surface-muted: #f7f8f8;
+  --border: #e3e6e5;
+  --text: #16191a;
+  --text-muted: #5b6467;
+  --danger: #b3261e;
+  --danger-soft: #fdf2f1;
+  --success: #1b6b4c;
+  --success-soft: #edf7f1;
+  --focus: var(--brand-ink);
+
+  color-scheme: light;
+}
+
+* {
+  min-width: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Stop iOS from rubber-banding the whole page behind sticky bars. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  background-color: var(--surface-muted);
+  color: var(--text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    "Noto Sans",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ==========================================================================
+   Interaction defaults
+   ========================================================================== */
+
+/* Taps must not flash a grey rectangle or leave a phantom hover state. */
+a,
+button,
+label,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Press feedback on every pressable surface. 0.97 is subtle enough to read as
+   "listening" rather than "animated". */
+.pressable {
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
+  touch-action: manipulation;
+}
+
+.pressable:active:not([aria-disabled="true"]) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      opacity 120ms ease;
+  }
+  .pressable:active:not([aria-disabled="true"]) {
+    transform: none;
+  }
+}
+
+/* Focus: visible, offset from the control, and legible on both brand and
+   surface backgrounds. `:focus-visible` only, so a click never shows a ring. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* ==========================================================================
+   Form controls
+
+   16px minimum font size on inputs: anything smaller triggers iOS Safari's
+   auto-zoom on focus, which then leaves the page scrolled sideways.
+   ========================================================================== */
+
+.field {
+  font-size: 1rem;
+  line-height: 1.5;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background-color: var(--surface);
+  color: var(--text);
+  padding: 0.875rem 1rem;
+  transition:
+    border-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+  /* Prevent the browser's own invalid styling from clashing with ours. */
+  box-shadow: none;
+}
+
+.field::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.field:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--text-muted) 35%, var(--border));
+}
+
+.field:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: var(--brand-ink);
+}
+
+.field[aria-invalid="true"] {
+  border-color: var(--danger);
+  background-color: var(--danger-soft);
+}
+
+/* ==========================================================================
+   Utility classes that would be noisy inline
+   ========================================================================== */
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.text-pretty {
+  text-wrap: pretty;
+}
+
+/* Screen-reader-only, but focusable (used for skip links). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.focus\:not-sr-only:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* ==========================================================================
+   Loading indicator
+
+   Three dots with a staggered pulse. Restrained on purpose: a big spinner on a
+   form that usually resolves in under a second feels like the app is struggling.
+   ========================================================================== */
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.loading-dots > span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: dot-pulse 1100ms var(--ease-in-out) infinite;
+}
+
+.loading-dots > span:nth-child(2) {
+  animation-delay: 120ms;
+}
+.loading-dots > span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+/* The button spinner. Defined here rather than via `animate-spin` so reduced
+   motion has a single, obvious place to switch it off. */
+.spinner {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-dots > span {
+    animation: none;
+    opacity: 0.7;
+  }
+  /* The button spinner is the one place a looping animation was intentional;
+     reduced motion still gets a busy affordance, just a still one. */
+  .spinner {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   Step transitions
+
+   Enter 240ms ease-out from a small offset (faster out than in, so the
+   interface feels like it's keeping up). Reduced motion keeps the opacity
+   change and drops the movement.
+   ========================================================================== */
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-enter {
+  animation: step-in 240ms var(--ease-out) both;
+}
+
+/* A gentle staggered rise for the blocks inside a step. Applied with a
+   per-index animationDelay inline (see .chip-enter for the same pattern), so
+   a screen arrives as one motion instead of everything snapping at once. */
+@keyframes step-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-item {
+  animation: step-item-in 220ms var(--ease-out) both;
+}
+
+/* Stagger by position, capped so a long screen never feels slow: the whole set
+   is settled within ~120ms of the first item. Purely decorative, so it must
+   never gate interaction — the elements are interactive from the first frame. */
+.step-enter > .step-item:nth-child(2) {
+  animation-delay: 30ms;
+}
+.step-enter > .step-item:nth-child(3) {
+  animation-delay: 60ms;
+}
+.step-enter > .step-item:nth-child(4) {
+  animation-delay: 90ms;
+}
+.step-enter > .step-item:nth-child(n + 5) {
+  animation-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes step-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes step-item-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* ==========================================================================
+   Quick-fill chips
+
+   Exact properties, never `all`: the chip is a solid background control and a
+   blanket transition would also animate layout-affecting properties on state
+   change. The rise is short (140ms) so tapping a chip feels instant; the stagger
+   is applied inline per index so the set arrives together.
+   ========================================================================== */
+
+.chip {
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chip-enter {
+  animation: chip-in 140ms var(--ease-out) both;
+}
+
+/* Hover is a pointer-only affordance; on touch it would fire during a scroll. */
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--brand) 35%, var(--border));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-enter {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   Star selection
+
+   A single overshoot on the star that was just picked, plus a soft ring behind
+   it. Both fire once per genuine pick (never for arrow-key navigation, never
+   when the step remounts with a rating already restored), so the row never
+   looks like it is popping on its own.
+   ========================================================================== */
+
+@keyframes star-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.22);
+  }
+  70% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* The ring starts slightly inside the star and fades as it grows outward. */
+@keyframes star-ring {
+  from {
+    opacity: 0.5;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+.star-ring {
+  animation: star-ring 320ms var(--ease-out) both;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 55%, transparent);
+}
+
+/* ==========================================================================
+   Celebration beats
+
+   The budget for delight is small and reserved: a finished draft and a copied
+   review. Both animate transform + opacity only, and both collapse to a plain
+   fade under reduced motion.
+   ========================================================================== */
+
+@keyframes badge-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes celebrate-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.step-celebrate {
+  animation: celebrate-in 320ms var(--ease-back) both;
+}
+
+@keyframes msg-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.msg-pop {
+  animation: msg-pop 240ms var(--ease-back) both;
+}
+
+/* Three dots that drift up and fade, once. Reused from the loading-dots dot
+   sizing but with its own short, non-looping motion. */
+.sparkle {
+  width: 0;
+  height: 0;
+}
+
+.sparkle-dot {
+  position: absolute;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 9999px;
+  background-color: var(--success);
+  animation: sparkle-up 640ms var(--ease-out) both;
+}
+
+.sparkle-dot:nth-child(1) {
+  left: -0.75rem;
+  animation-delay: 40ms;
+}
+.sparkle-dot:nth-child(2) {
+  left: 0;
+  animation-delay: 120ms;
+}
+.sparkle-dot:nth-child(3) {
+  left: 0.75rem;
+  animation-delay: 200ms;
+}
+
+@keyframes sparkle-up {
+  0% {
+    opacity: 0;
+    transform: translateY(0.25rem) scale(0.6);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-0.35rem) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1rem) scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes star-pop {
+    from {
+      transform: none;
+    }
+    to {
+      transform: none;
+    }
+  }
+  .star-ring {
+    animation: none;
+    opacity: 0;
+  }
+  .step-celebrate,
+  .msg-pop {
+    animation: none;
+  }
+  /* The sparkle is pure decoration; reduced motion removes it entirely rather
+     than holding a frozen dot on screen. */
+  .sparkle {
+    display: none;
+  }
+}
+
+/* `100dvh` handles the mobile URL bar; the hook falls back for old WebViews. */
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Bottom padding that clears the home indicator when a sticky bar is present. */
+.pb-safe {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.pb-safe-lg {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}

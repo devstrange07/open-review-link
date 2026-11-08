@@ -1,0 +1,20 @@
+# Build output and dependencies
+.next/
+node_modules/
+out/
+build/
+
+# Lockfile is generated; reformatting it churns a 10k-line diff for no benefit.
+package-lock.json
+
+# Test artifacts
+playwright-report/
+test-results/
+blob-report/
+coverage/
+
+# Generated
+next-env.d.ts
+*.tsbuildinfo
+/qr/
+*.log

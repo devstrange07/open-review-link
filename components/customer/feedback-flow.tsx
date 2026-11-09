@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Copy, Check, RefreshCw } from "lucide-react";
+import { Copy, Check, Sparkles, Loader2 } from "lucide-react";
 import type { PublicShopConfig } from "@/lib/settings";
 import { MAX_FEEDBACK_LENGTH, MIN_FEEDBACK_LENGTH } from "@/lib/validation";
 import { buildCombinedFeedback, startersForRating } from "@/lib/feedback-starters";
@@ -127,9 +127,6 @@ export function FeedbackFlow({ shop }: Props) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
-  // True only while the editor is showing its freshly generated draft. Drives a
-  // one-shot entrance; a later "write it differently" does not replay it.
-  const [justGenerated, setJustGenerated] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
@@ -143,6 +140,11 @@ export function FeedbackFlow({ shop }: Props) {
   // tapping a star — not on a draft restore, which would yank focus on load.
   const focusDescribeOnEnter = useRef(false);
   const describeHeading = useRef<HTMLHeadingElement | null>(null);
+  // Same contract for the editor: the screen carries no visible heading, so
+  // focus has to be moved deliberately or it lands on <body> when the describe
+  // section unmounts.
+  const focusEditorOnEnter = useRef(false);
+  const editorHeading = useRef<HTMLHeadingElement | null>(null);
 
   /* ---------------------------------------------------------------------- */
   /* Draft persistence                                                       */
@@ -218,20 +220,9 @@ export function FeedbackFlow({ shop }: Props) {
       historyDepth.current += 1;
     } catch {
       // Some embedded WebViews refuse pushState. Stepping still works; the
-      // Back buttons below notice the depth never increased.
+      // browser's Back gesture then leaves the page instead of walking back a
+      // step, which is the best available behaviour there.
     }
-  }, []);
-
-  const goBackOneStep = useCallback(() => {
-    const fallback: Step = stepRef.current === "editor" ? "describe" : "rate";
-
-    if (historyDepth.current > 0) {
-      // popstate handles the state change and decrements the depth.
-      window.history.back();
-      return;
-    }
-    setStep(fallback);
-    stepRef.current = fallback;
   }, []);
 
   useEffect(() => {
@@ -309,6 +300,16 @@ export function FeedbackFlow({ shop }: Props) {
     if (step === "describe" && focusDescribeOnEnter.current) {
       focusDescribeOnEnter.current = false;
       describeHeading.current?.focus();
+    }
+  }, [step]);
+
+  // Mirror of the rule above for the editor, which is entered only after a
+  // successful generate or a draft restore. A restore must not steal focus on
+  // load, so the flag is armed by generate() alone.
+  useEffect(() => {
+    if (step === "editor" && focusEditorOnEnter.current) {
+      focusEditorOnEnter.current = false;
+      editorHeading.current?.focus();
     }
   }, [step]);
 
@@ -396,7 +397,7 @@ export function FeedbackFlow({ shop }: Props) {
 
       setReviewText(parsed.reviewText);
       void sendAnalyticsEvent("ai_generation_succeeded");
-      setJustGenerated(true);
+      focusEditorOnEnter.current = true;
       pushStep("editor");
     } catch {
       void sendAnalyticsEvent("ai_generation_failed");
@@ -453,9 +454,22 @@ export function FeedbackFlow({ shop }: Props) {
     }
   }, [rating, combinedFeedback, generating]);
 
-  const copyReview = useCallback(async () => {
+  const copyAndOpenGoogle = useCallback(async () => {
     const text = reviewText.trim();
     if (!text) return;
+
+    // Two effects from one tap: the text goes to the clipboard and the Google
+    // review page opens. The tab is opened FIRST and synchronously inside the
+    // gesture — awaiting the clipboard spends the user activation, and mobile
+    // Safari/Chrome block a popup spawned after an await. Opening first also
+    // means a clipboard rejection never strands the customer without Google.
+    void sendAnalyticsEvent("google_review_clicked");
+    try {
+      window.open(shop.googleReviewUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      // Popup blocked outright. The plain link is still on the rate and
+      // describe steps, so the customer is never without a route to Google.
+    }
 
     // Clipboard API is only available in secure contexts. If it's missing or
     // rejects, we do NOT claim success — we show the manual path instead.
@@ -463,28 +477,20 @@ export function FeedbackFlow({ shop }: Props) {
       if (!navigator.clipboard?.writeText) throw new Error("unavailable");
       await navigator.clipboard.writeText(text);
       setCopyState("copied");
-      setAnnouncement("Review copied. Open Google Reviews and paste your text.");
       void sendAnalyticsEvent("review_copied");
     } catch {
       setCopyState("manual");
-      setAnnouncement(
-        "Copying isn't available. Select the text below and copy it manually.",
-      );
     }
 
     if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
     copyResetTimer.current = setTimeout(() => setCopyState("idle"), 2500);
-  }, [reviewText]);
+  }, [reviewText, shop.googleReviewUrl]);
 
   useEffect(() => {
     return () => {
       if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
     };
   }, []);
-
-  function goBackToDescribe() {
-    goBackOneStep();
-  }
 
   function goToGoogle() {
     void sendAnalyticsEvent("google_review_clicked");
@@ -526,11 +532,10 @@ export function FeedbackFlow({ shop }: Props) {
               {shop.welcomeMessage}
             </p>
 
-            <div className="step-item mt-9">
-              <p
-                id="rating-prompt"
-                className="mb-3 text-center text-[0.9375rem] font-medium"
-              >
+            <div className="step-item mt-12">
+              {/* sr-only: five full-size stars are the prompt. Kept in the
+                  document because it also names the group for assistive tech. */}
+              <p id="rating-prompt" className="sr-only">
                 How was your experience with us?
               </p>
               <RatingStars
@@ -539,30 +544,23 @@ export function FeedbackFlow({ shop }: Props) {
                 onCommit={handleStarCommit}
                 describedBy={ratingSummaryId}
               />
-              <p
-                id={ratingSummaryId}
-                aria-live="polite"
-                className="mt-2 min-h-5 text-center text-sm text-[color:var(--text-muted)]"
-              >
-                {rating === null ? "Tap a star to continue" : `You selected ${ratingLabel}`}
+              {/* Announced, not displayed. The row of stars already shows the
+                  selection; a visible restatement of it just adds a line of
+                  text under the thing being looked at. */}
+              <p id={ratingSummaryId} aria-live="polite" className="sr-only">
+                {rating === null ? "" : `You selected ${ratingLabel}`}
               </p>
             </div>
 
             <div className="step-item mt-8 flex flex-col items-center gap-3 border-t border-[color:var(--border)] pt-8">
               <GoogleReviewLink href={shop.googleReviewUrl} onNavigate={goToGoogle} />
-              <p
+              <a
                 id={privacyId}
-                className="text-center text-xs leading-relaxed text-pretty text-[color:var(--text-muted)]"
+                href="/privacy"
+                className="text-center text-xs text-[color:var(--text-muted)] underline underline-offset-2 hover:text-[color:var(--text)]"
               >
-                No account needed. Anything you write is shared privately with us, never
-                published.{" "}
-                <a
-                  href="/privacy"
-                  className="underline underline-offset-2 hover:text-[color:var(--text)]"
-                >
-                  Privacy notice
-                </a>
-              </p>
+                Privacy notice
+              </a>
             </div>
           </section>
         ) : null}
@@ -598,15 +596,11 @@ export function FeedbackFlow({ shop }: Props) {
             >
               Tell us about your experience.
             </h2>
-            <p className="step-item mt-1.5 text-[0.9375rem] leading-relaxed text-[color:var(--text-muted)]">
-              Tap what fits, or write it your own way. A sentence or two is plenty.
-            </p>
 
             <div className="step-item mt-5">
-              <p
-                id={quickFillId}
-                className="mb-2.5 text-[0.8125rem] font-medium text-[color:var(--text-muted)]"
-              >
+              {/* sr-only: it names the chip group for assistive tech; on screen
+                  the chips are self-evidently a set of openers. */}
+              <p id={quickFillId} className="sr-only">
                 Quick things you can say
               </p>
               <QuickFillChips
@@ -661,7 +655,7 @@ export function FeedbackFlow({ shop }: Props) {
               </div>
             ) : null}
 
-            <div className="step-item mt-6 space-y-3">
+            <div className="step-item mt-6">
               <Button
                 fullWidth
                 loading={generating}
@@ -672,56 +666,25 @@ export function FeedbackFlow({ shop }: Props) {
               >
                 {generating ? "Writing your review" : "Help me write a review"}
               </Button>
-
-              <Button variant="secondary" fullWidth onClick={goBackToDescribe}>
-                Back
-              </Button>
             </div>
 
             <div className="step-item mt-5 flex flex-col items-center gap-2 border-t border-[color:var(--border)] pt-5">
               <GoogleReviewLink href={shop.googleReviewUrl} onNavigate={goToGoogle} />
-              <p className="text-center text-xs leading-relaxed text-pretty text-[color:var(--text-muted)]">
-                <a
-                  href="/privacy"
-                  className="underline underline-offset-2 hover:text-[color:var(--text)]"
-                >
-                  Privacy notice
-                </a>
-              </p>
             </div>
           </section>
         ) : null}
 
         {step === "editor" ? (
-          <section key="editor" className="step-enter mt-8">
-            <div className="flex items-center gap-2" aria-hidden="true">
-              <span
-                className="grid size-7 place-items-center rounded-full text-[color:var(--on-brand)]"
-                style={{
-                  backgroundColor: "var(--success)",
-                  animation: justGenerated
-                    ? "badge-pop 420ms var(--ease-back) both"
-                    : undefined,
-                }}
-              >
-                <Check className="size-4" strokeWidth={3} />
-              </span>
-              <span className="text-sm font-medium text-[color:var(--success)]">
-                Draft ready
-              </span>
-            </div>
-            <h2
-              className={`mt-3 text-xl font-semibold tracking-tight text-pretty ${
-                justGenerated ? "step-celebrate" : ""
-              }`}
-            >
-              Your review is ready.
+          <section key="editor" className="step-enter mt-4">
+            {/* The screen's only heading, and its focus target on entry. There is
+                deliberately no visible title: the filled box IS the state, and a
+                "your review is ready" line above it only delays the text the
+                customer came for. */}
+            <h2 ref={editorHeading} tabIndex={-1} className="sr-only outline-none">
+              Your review is ready
             </h2>
-            <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-[color:var(--text-muted)]">
-              Edit anything that doesn&rsquo;t sound like you.
-            </p>
 
-            <div className="mt-5">
+            <div>
               <label htmlFor="review" className="sr-only">
                 Your review
               </label>
@@ -754,7 +717,29 @@ export function FeedbackFlow({ shop }: Props) {
                   </div>
                 ) : null}
               </div>
-              <div className="mt-1.5 flex justify-end">
+              {/* One row, two affordances: the rewrite action sits where the
+                  customer is already looking, and the counter keeps its corner.
+                  Nothing new is added to the screen's height. */}
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <Button
+                  variant="quiet"
+                  aria-label="Write it differently"
+                  title="Write it differently"
+                  aria-disabled={generating || undefined}
+                  onClick={() => void regenerate()}
+                  // No size utility: the shared Button's own padding and 3.25rem
+                  // min-height already give this a 52px tap target. Forcing a
+                  // width would fight that padding inside a border-box and
+                  // squeeze the icon out of its content box.
+                  className="shrink-0"
+                  icon={
+                    generating ? (
+                      <Loader2 aria-hidden="true" className="spinner size-4" />
+                    ) : (
+                      <Sparkles aria-hidden="true" className="size-4" />
+                    )
+                  }
+                />
                 <span id="review-count">
                   <CharacterCounter length={reviewText.length} max={800} />
                 </span>
@@ -779,16 +764,16 @@ export function FeedbackFlow({ shop }: Props) {
             {copyState === "copied" ? (
               <div className="mt-4">
                 <InlineMessage tone="success" className="msg-pop">
-                  Review copied! Open Google Reviews and paste your text.
+                  Review copied — paste it into the Google review box.
                 </InlineMessage>
               </div>
             ) : null}
 
-            <div className="relative mt-6 space-y-3">
+            <div className="mt-6">
               <Button
                 fullWidth
                 variant={copyState === "copied" ? "success" : "primary"}
-                onClick={() => void copyReview()}
+                onClick={() => void copyAndOpenGoogle()}
                 icon={
                   copyState === "copied" ? (
                     <Check aria-hidden="true" className="size-5" />
@@ -798,62 +783,9 @@ export function FeedbackFlow({ shop }: Props) {
                 }
                 disabled={!reviewText.trim()}
               >
-                {copyState === "copied" ? "Copied" : "Copy my review"}
-              </Button>
-
-              {/* A single restrained sparkle that fires with the copy success.
-                  Decoration only, so it is hidden from assistive tech and from
-                  reduced-motion users via CSS. */}
-              {copyState === "copied" ? (
-                <span
-                  aria-hidden="true"
-                  className="sparkle pointer-events-none absolute top-0 right-2 -translate-y-1/2"
-                >
-                  <span className="sparkle-dot" />
-                  <span className="sparkle-dot" />
-                  <span className="sparkle-dot" />
-                </span>
-              ) : null}
-
-              <GoogleReviewLink
-                href={shop.googleReviewUrl}
-                label="Open Google Reviews"
-                variant="block"
-                onNavigate={goToGoogle}
-              />
-            </div>
-
-            <div className="mt-4 flex items-center justify-center gap-4">
-              <Button
-                variant="quiet"
-                loading={generating}
-                loadingLabel="Rewriting"
-                onClick={() => void regenerate()}
-                icon={<RefreshCw aria-hidden="true" className="size-4" />}
-                className="text-sm"
-              >
-                {generating ? "Rewriting" : "Write it differently"}
-              </Button>
-              <Button
-                variant="quiet"
-                onClick={goBackToDescribe}
-                icon={<ArrowLeft aria-hidden="true" className="size-4" />}
-                className="text-sm"
-              >
-                Back
+                {copyState === "copied" ? "Copied" : "Copy & open Google Reviews"}
               </Button>
             </div>
-
-            <p className="mt-6 text-center text-xs leading-relaxed text-pretty text-[color:var(--text-muted)]">
-              You&rsquo;re in control: paste it into Google and edit it there if you like
-              — or don&rsquo;t post at all.{" "}
-              <a
-                href="/privacy"
-                className="underline underline-offset-2 hover:text-[color:var(--text)]"
-              >
-                Privacy notice
-              </a>
-            </p>
           </section>
         ) : null}
       </main>

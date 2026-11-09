@@ -18,6 +18,11 @@ describe("startersForRating", () => {
     expect(startersForRating(1)).toBe(CONSTRUCTIVE_STARTERS);
   });
 
+  it("keeps each tier to six short openers", () => {
+    expect(APPRECIATIVE_STARTERS).toHaveLength(6);
+    expect(CONSTRUCTIVE_STARTERS).toHaveLength(6);
+  });
+
   it("does not hand an unhappy customer compliments", () => {
     // The sets must be disjoint so a 1-star customer is never shown praise.
     for (const phrase of CONSTRUCTIVE_STARTERS) {
@@ -49,17 +54,17 @@ describe("buildCombinedFeedback", () => {
   });
 
   it("lets chips alone satisfy a non-empty review with no typing", () => {
-    const text = buildCombinedFeedback(["Friendly and helpful staff"], "");
-    expect(text).toBe("Friendly and helpful staff.");
+    const text = buildCombinedFeedback(["Friendly, helpful staff"], "");
+    expect(text).toBe("Friendly, helpful staff.");
   });
 
   it("puts the customer's own words first, then the chips", () => {
     const text = buildCombinedFeedback(
-      ["Quick service with no waiting", "Clean and well-organised shop"],
+      ["Quick service", "Clean and organised"],
       "Popped in for a charger",
     );
     expect(text).toBe(
-      "Popped in for a charger. Quick service with no waiting. Clean and well-organised shop.",
+      "Popped in for a charger. Quick service. Clean and organised.",
     );
   });
 

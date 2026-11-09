@@ -12,29 +12,30 @@
  *   - 1-3 stars: constructive complaints, so an unhappy customer is not handed a
  *     list of compliments to tick.
  *
+ * Six per tier, kept short so a two-column grid fills the phone width without
+ * wrapping into a tall wall of pills.
+ *
  * Nothing here is sent on its own: a tapped chip is merged with whatever the
  * customer typed, and the combined text is editable in the box before anything
  * leaves the page.
  */
 
 export const APPRECIATIVE_STARTERS = [
-  "Friendly and helpful staff",
-  "Quick service with no waiting",
-  "Great range of products at good prices",
-  "Clean and well-organised shop",
-  "Staff answered all my questions patiently",
-  "Found exactly what I was looking for",
-  "Worth the visit, I will return",
+  "Friendly, helpful staff",
+  "Quick service",
+  "Fair prices",
+  "Clean and organised",
+  "Found what I needed",
+  "Worth coming back",
 ] as const;
 
 export const CONSTRUCTIVE_STARTERS = [
-  "I had to wait a long time",
-  "Staff could have been more attentive",
-  "The items I wanted were unavailable",
-  "Prices felt a little high",
-  "The shop was crowded and disorganised",
-  "Hard to find what I needed",
-  "The service felt rushed",
+  "Long wait",
+  "Staff could listen more",
+  "Items unavailable",
+  "Prices felt high",
+  "Hard to find things",
+  "Service felt rushed",
 ] as const;
 
 /**

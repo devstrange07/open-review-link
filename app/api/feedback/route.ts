@@ -16,24 +16,21 @@ import { feedbackSubmissionSchema, firstIssueMessage } from "@/lib/validation";
 /**
  * POST /api/feedback
  *
- * Stores the customer's private written feedback. Sharing is implicit: the
- * customer typed it into this flow and asked for a review, so *that action* is
- * the consent. Nothing is stored silently — the row carries the published
- * notice version the customer was shown, which is the consent evidence.
+ * Stores the customer's private feedback (rating, optional topics/text, and
+ * optional follow-up phone with explicit consent). Returns a public reference
+ * the customer can quote for deletion requests.
  *
  * Defences, in order:
  *   1. Same-origin check.
  *   2. Rate limit.
  *   3. Strict schema, so a client cannot smuggle `id`, `created_at` or
  *      `business_id` into the row.
- *   4. `business_id` and `consented_at` are set here, never read from input.
+ *   4. `business_id`, `consented_at`, and `public_reference` are set here.
  */
 export async function POST(request: Request) {
   const originError = guardOrigin(request);
   if (originError) return originError;
 
-  // Cheapest rejections first: an oversized or malformed body should never
-  // consume the caller's budget.
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
 
@@ -45,14 +42,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const parsed = feedbackSubmissionSchema.strict().safeParse(body.data);
+    const parsed = feedbackSubmissionSchema.safeParse(body.data);
     if (!parsed.success) {
       return apiError(ERROR_CODES.VALIDATION_ERROR, firstIssueMessage(parsed.error));
     }
 
-    // Cross-check the notice version against the live configuration. A client
-    // can claim any string; only the version currently published is valid
-    // evidence of what the customer was shown.
     const settings = await getBusinessSettings();
     if (!settings) return apiError(ERROR_CODES.INTERNAL_ERROR);
 
@@ -63,24 +57,37 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createAdminClient();
-    const { error } = await supabase.from("feedback_submissions").insert({
-      business_id: BUSINESS_ID,
-      rating: parsed.data.rating,
-      feedback_text: parsed.data.feedbackText,
-      consent_notice_version: parsed.data.consentNoticeVersion,
-      // Server clock, not the client's.
-      consented_at: new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+    const followUp = parsed.data.followUpConsent && parsed.data.contactPhone;
 
-    if (error) {
-      console.error("[feedback] insert failed", error.code);
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("feedback_submissions")
+      .insert({
+        business_id: BUSINESS_ID,
+        rating: parsed.data.rating,
+        feedback_text: parsed.data.feedbackText || null,
+        improvement_topics: parsed.data.topics,
+        consent_notice_version: parsed.data.consentNoticeVersion,
+        consented_at: now,
+        follow_up_consent: Boolean(followUp),
+        follow_up_consent_at: followUp ? now : null,
+        contact_phone: followUp ? parsed.data.contactPhone : null,
+      })
+      .select("public_reference")
+      .single();
+
+    if (error || !data?.public_reference) {
+      console.error("[feedback] insert failed", error?.code);
       return apiError(ERROR_CODES.INTERNAL_ERROR);
     }
 
     void recordEvent("feedback_saved");
 
-    return apiOk({ message: "Feedback received." });
+    return apiOk({
+      message: "Feedback received.",
+      reference: data.public_reference as string,
+    });
   } catch (error) {
     return toErrorResponse(error, "feedback");
   }

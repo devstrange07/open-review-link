@@ -28,7 +28,7 @@ values (
   'Thank you for visiting!',
   'We''d love to hear about your experience.',
   'https://g.page/r/CSkWByQnxLfTEAE/review',
-  'v1',
+  'v2',
   'kalol.ptpl@gmail.com',
   'Kaival Agency, C/o, Road, opp. Bus Stop, Math Faliya, Vadodara, Kalol, Gujarat 389330'
 )

@@ -1,7 +1,7 @@
 import "server-only";
 import { GoogleGenAI } from "@google/genai";
 import { getServerEnv } from "@/lib/env";
-import { SYSTEM_INSTRUCTION, buildUserPrompt, type PromptInput } from "./prompt";
+import { buildSystemInstruction, buildUserPrompt, type PromptInput } from "./prompt";
 import {
   AI_PROVIDER_TIMEOUT_MS,
   classifyProviderError,
@@ -45,7 +45,7 @@ export async function attemptGeminiDraft(
       model,
       contents: buildUserPrompt(input),
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: buildSystemInstruction(input.locale ?? "en"),
         temperature: 0.6,
         // A 30-80 word review is well under 400 tokens; the cap bounds cost if
         // the model decides to ramble.

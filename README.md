@@ -1,8 +1,10 @@
 # QR Feedback & Google Reviews
 
 A single-shop, mobile-first feedback page. A customer scans a QR code at the
-counter, picks 1–5 stars, optionally says what happened, and gets an AI-drafted
-Google review they can edit before copying. No account, no app install.
+counter, rates their visit (with clear star meanings), optionally picks
+improvement topics and a short note, and may finish in under 25 seconds — or
+optionally draft a Google review with AI help. English, Hindi, and Gujarati are
+supported. No account, no app install.
 
 The Google review link is available on every screen at every star rating. It is
 never gated, never hidden behind a good score, and never styled as the "happy"
@@ -37,7 +39,7 @@ Supabase (Postgres + Auth) · NVIDIA NIM (primary) / Google Gemini (fallback) ·
 | Route             | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
 | `/`               | Redirects to the live shop slug read from the database        |
-| `/r/[slug]`       | The customer flow: rate → describe → AI draft → copy → Google |
+| `/r/[slug]`       | Customer flow: rate → optional feedback → choices → thank-you |
 | `/privacy`        | Privacy notice, rendered from live `business_settings` values |
 | `/admin/login`    | Email + password sign-in                                      |
 | `/admin`          | Metrics, rating distribution, date-range filter               |
@@ -52,16 +54,19 @@ database, so you change them in `/admin/settings` **without a redeploy**.
 These are enforced in code, and tests will fail if they regress:
 
 - **The Google link renders unconditionally**, on every step, for 1 star as
-  well as 5. There is no rating-based routing anywhere.
-- **Sharing written feedback is the action, not a checkbox.** Writing feedback
-  into the flow and asking for a review _is_ the decision to share it, so there
-  is no tick-box to clear. `POST /api/feedback` validates the payload against a
-  strict schema and stamps each row with the published `privacy_notice_version`
-  the customer was shown, which is the consent evidence.
+  well as 5. There is no rating-based routing anywhere. Public reviews are never
+  required.
+- **Written feedback is optional.** Rating alone (and optional topics) can be
+  saved. Free text is never mandatory. Continuing the private flow stamps the
+  published `privacy_notice_version` as consent evidence for processing.
+- **Follow-up phone contact is opt-in only** (ratings 1–3), with an explicit
+  unchecked consent checkbox. No phone is stored without that consent.
 - **Generated reviews are never persisted.** The AI draft exists in the
   customer's browser only. There is nothing to delete and nothing to leak.
 - **Customer text is never logged.** API error logs carry an error code and a
   latency, never the feedback body.
+- **Deletion reference.** Each submission returns a `public_reference` the
+  customer can quote when emailing the shop to request erasure.
 
 ## Local setup
 
@@ -87,6 +92,7 @@ these are steps you run once.
    - `supabase/migrations/0002_rls.sql` — RLS, `public.is_admin()`, policies
    - `supabase/migrations/0003_overview_rpc.sql` — dashboard aggregate RPC
    - `supabase/migrations/0004_retention.sql` — `pg_cron` retention job
+   - `supabase/migrations/0005_customer_journey.sql` — topics, reference ID, follow-up phone, privacy v2
    - `supabase/seed.sql` — the single `business_settings` row
 
    Or, with the Supabase CLI linked to your project:
@@ -232,8 +238,8 @@ Quality gates — all four must pass before you deploy:
 ```bash
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest — 98 unit tests
-npm run test:e2e       # playwright — 114 tests across 3 viewports
+npm run test           # vitest unit tests
+npm run test:e2e       # playwright across configured viewports
 npm run format:check   # prettier
 ```
 
@@ -311,15 +317,25 @@ delete from public.analytics_events       where created_at < now() - interval '9
 ```
 
 The privacy notice at `/privacy` states these periods. If you change them here,
-update the notice text to match — a mismatch is a compliance problem, not a
-cosmetic one.
+update the notice text **and bump `privacy_notice_version`** (migration or SQL)
+so new submissions stamp the matching version — a mismatch is a compliance
+problem, not a cosmetic one.
+
+Customers receive a `public_reference` after submit. Quote it when emailing the
+shop contact to request earlier deletion. Admin feedback lists the same
+reference for lookup.
+
+**Languages.** The customer journey and privacy notice ship in English (default),
+Hindi, and Gujarati via the corner language switcher. Admin-edited welcome title
+and message remain English in the database; Hindi/Gujarati use translated
+fallbacks.
 
 ## Tests
 
 ```bash
-npm run test        # 98 Vitest units: validators, sanitizer, prompt,
+npm run test        # Vitest units: validators, i18n, sanitizer, prompt,
                     # contrast math, http guards, rate-limit fallback
-npm run test:e2e    # 114 Playwright tests on Pixel 7, iPhone 13, Desktop Chrome
+npm run test:e2e    # Playwright on Pixel 7, iPhone 13, Desktop Chrome
 ```
 
 E2E runs against a production build and a mock Supabase fixture, so it is

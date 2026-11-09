@@ -393,6 +393,38 @@ summary {
     color 150ms var(--ease-out);
 }
 
+.chip--selected {
+  background-color: var(--brand-soft);
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
+  color: var(--brand-ink);
+}
+
+.star-glyph {
+  transition: color 150ms var(--ease-out), fill 150ms var(--ease-out);
+}
+
+.star-label {
+  transition: color 150ms var(--ease-out);
+}
+
+.ai-overlay {
+  opacity: 1;
+  transition: opacity 180ms var(--ease-out);
+}
+
+@keyframes msg-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.msg-fade {
+  animation: msg-fade 180ms var(--ease-out) both;
+}
+
 @keyframes chip-in {
   from {
     opacity: 0;
@@ -498,7 +530,13 @@ summary {
     opacity: 0;
   }
   .msg-pop {
-    animation: none;
+    animation: msg-fade 180ms var(--ease-out) both;
+  }
+  .msg-fade {
+    animation: msg-fade 120ms var(--ease-out) both;
+  }
+  .ai-overlay {
+    transition: none;
   }
 }
 

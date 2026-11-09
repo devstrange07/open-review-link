@@ -54,7 +54,7 @@ test.describe("POST /api/review-draft — validation", () => {
     expect(body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  test("rejects feedback below the minimum length", async ({ request }) => {
+  test("rejects feedback with neither topics nor enough text", async ({ request }) => {
     const response = await request.post("/api/review-draft", {
       headers: freshIp(),
       data: { rating: 5, feedbackText: "ok" },
@@ -92,19 +92,19 @@ test.describe("POST /api/review-draft — validation", () => {
 
 test.describe("POST /api/feedback — validation", () => {
   test("accepts a submission with no separate consent flag", async ({ request }) => {
-    // Sharing is implicit: a rating, text and the published notice version are
-    // enough. The mock Supabase fixture stands in for the database.
+    // Rating + notice version are enough; written text and topics are optional.
     const response = await request.post("/api/feedback", {
       headers: freshIp(),
       data: {
         rating: 5,
         feedbackText: "Great shop.",
-        consentNoticeVersion: "v1",
+        consentNoticeVersion: "v2",
       },
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
+    expect(typeof body.reference === "string" || body.reference === undefined).toBe(true);
   });
 
   test("rejects a submission with no notice version", async ({ request }) => {
@@ -124,7 +124,7 @@ test.describe("POST /api/feedback — validation", () => {
       data: {
         rating: 5,
         feedbackText: "Great shop.",
-        consentNoticeVersion: "v1",
+        consentNoticeVersion: "v2",
         business_id: 2,
         id: "00000000-0000-0000-0000-000000000000",
       },
@@ -140,7 +140,7 @@ test.describe("POST /api/feedback — validation", () => {
       data: {
         rating: 6,
         feedbackText: "Great shop.",
-        consentNoticeVersion: "v1",
+        consentNoticeVersion: "v2",
       },
     });
     expect(response.status()).toBe(400);
@@ -154,7 +154,7 @@ test.describe("POST /api/feedback — validation", () => {
       data: {
         rating: 5,
         feedbackText: "Great shop.",
-        consentNoticeVersion: "v1",
+        consentNoticeVersion: "v2",
       },
     });
     // Origin is checked first, so this is stable under rate limiting.

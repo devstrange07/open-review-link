@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { FEEDBACK_TOPIC_IDS } from "@/lib/feedback-topics";
+import { LOCALES } from "@/lib/i18n/types";
 
 /**
  * Shared validation contracts. Imported by both the API routes and the client
@@ -6,6 +8,7 @@ import { z } from "zod";
  */
 
 export const MAX_FEEDBACK_LENGTH = 1500;
+/** Soft hint for optional free text — not required to continue the journey. */
 export const MIN_FEEDBACK_LENGTH = 5;
 /** Upper bound for a generated draft after sanitising. */
 export const MAX_REVIEW_LENGTH = 800;
@@ -16,6 +19,15 @@ export const ratingSchema = z
   .min(1, "Rating must be at least 1.")
   .max(5, "Rating must be at most 5.");
 
+/** Optional free-text feedback: empty is allowed; otherwise 1–1500 trimmed chars. */
+export const optionalFeedbackTextSchema = z
+  .string({ invalid_type_error: "Tell us about your experience." })
+  .transform((value) => value.trim())
+  .refine((value) => value.length <= MAX_FEEDBACK_LENGTH, {
+    message: `Please keep it under ${MAX_FEEDBACK_LENGTH} characters.`,
+  });
+
+/** Required feedback text for AI draft generation. */
 export const feedbackTextSchema = z
   .string({ invalid_type_error: "Tell us about your experience." })
   .transform((value) => value.trim())
@@ -26,28 +38,114 @@ export const feedbackTextSchema = z
     message: `Please keep it under ${MAX_FEEDBACK_LENGTH} characters.`,
   });
 
-export const reviewDraftRequestSchema = z.object({
-  rating: ratingSchema,
-  feedbackText: feedbackTextSchema,
-});
+export const localeSchema = z.enum(LOCALES);
+
+export const improvementTopicsSchema = z
+  .array(
+    z.enum(
+      FEEDBACK_TOPIC_IDS as unknown as [
+        (typeof FEEDBACK_TOPIC_IDS)[number],
+        ...(typeof FEEDBACK_TOPIC_IDS)[number][],
+      ],
+    ),
+  )
+  .max(FEEDBACK_TOPIC_IDS.length)
+  .default([]);
+
+/**
+ * AI draft needs enough signal: either substantial free text, or topics plus
+ * any text. The route builds a combined prompt string from topics + text.
+ */
+export const reviewDraftRequestSchema = z
+  .object({
+    rating: ratingSchema,
+    feedbackText: optionalFeedbackTextSchema,
+    topics: improvementTopicsSchema.optional(),
+    locale: localeSchema.optional().default("en"),
+  })
+  .superRefine((value, ctx) => {
+    const topics = value.topics ?? [];
+    const hasText = value.feedbackText.length >= MIN_FEEDBACK_LENGTH;
+    if (!hasText && topics.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add a topic or a few words so we can draft a review.",
+        path: ["feedbackText"],
+      });
+    }
+  });
 
 export type ReviewDraftRequest = z.infer<typeof reviewDraftRequestSchema>;
 
+const phoneDigitsSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/[\s\-()]/g, ""))
+  .refine((value) => /^\+?[0-9]{8,15}$/.test(value), {
+    message: "Enter a valid phone number (8–15 digits).",
+  });
+
 /**
- * Storing feedback is implicit: writing it into the flow and pressing generate
- * *is* the customer's decision to share it. The published notice version still
- * travels with the row, so each stored submission records which privacy notice
- * the customer was shown — that is the consent evidence.
+ * Storing feedback is the customer's decision to share private notes with the
+ * shop. Written text and topics are optional; the published notice version
+ * still travels with the row as consent evidence for processing.
  */
-export const feedbackSubmissionSchema = z.object({
-  rating: ratingSchema,
-  feedbackText: feedbackTextSchema,
-  consentNoticeVersion: z
-    .string()
-    .trim()
-    .min(1)
-    .max(32, "Consent notice version is too long."),
-});
+export const feedbackSubmissionSchema = z
+  .object({
+    rating: ratingSchema,
+    feedbackText: optionalFeedbackTextSchema.optional().default(""),
+    topics: improvementTopicsSchema.optional().default([]),
+    consentNoticeVersion: z
+      .string()
+      .trim()
+      .min(1)
+      .max(32, "Consent notice version is too long."),
+    followUpConsent: z.boolean().optional().default(false),
+    contactPhone: z.string().trim().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.followUpConsent) {
+      if (!value.contactPhone || value.contactPhone.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter a phone number so we can reach you.",
+          path: ["contactPhone"],
+        });
+        return;
+      }
+      const phone = phoneDigitsSchema.safeParse(value.contactPhone);
+      if (!phone.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: phone.error.issues[0]?.message ?? "Enter a valid phone number.",
+          path: ["contactPhone"],
+        });
+      }
+    } else if (value.contactPhone && value.contactPhone.trim().length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please confirm we may contact you about this feedback.",
+        path: ["followUpConsent"],
+      });
+    }
+  })
+  .transform((value) => {
+    const followUpConsent = value.followUpConsent === true;
+    let contactPhone: string | null = null;
+    if (followUpConsent && value.contactPhone) {
+      const phone = phoneDigitsSchema.safeParse(value.contactPhone);
+      contactPhone = phone.success ? phone.data : null;
+    }
+    return {
+      rating: value.rating,
+      feedbackText: value.feedbackText ?? "",
+      topics: value.topics ?? [],
+      consentNoticeVersion: value.consentNoticeVersion,
+      followUpConsent,
+      contactPhone,
+    };
+  });
 
 export type FeedbackSubmission = z.infer<typeof feedbackSubmissionSchema>;
 
@@ -148,4 +246,23 @@ export const overviewQuerySchema = z.object({
 /** Flatten a ZodError into a single user-facing sentence. */
 export function firstIssueMessage(error: z.ZodError): string {
   return error.issues[0]?.message ?? "That request was not valid.";
+}
+
+/** Build the text block sent to the AI from topics + free text. */
+export function buildAiFeedbackSignal(input: {
+  feedbackText: string;
+  topics: string[];
+  topicLabels?: Record<string, string>;
+}): string {
+  const parts: string[] = [];
+  if (input.topics.length > 0) {
+    const labels = input.topics.map(
+      (id) => input.topicLabels?.[id] ?? id.replaceAll("_", " "),
+    );
+    parts.push(`Topics to improve: ${labels.join(", ")}.`);
+  }
+  if (input.feedbackText.trim()) {
+    parts.push(input.feedbackText.trim());
+  }
+  return parts.join("\n\n");
 }

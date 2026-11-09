@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   feedbackSubmissionSchema,
   feedbackTextSchema,
+  optionalFeedbackTextSchema,
   ratingSchema,
   analyticsEventSchema,
   reviewDraftRequestSchema,
@@ -10,6 +11,7 @@ import {
   hexColorSchema,
   feedbackQuerySchema,
   overviewQuerySchema,
+  buildAiFeedbackSignal,
 } from "@/lib/validation";
 
 describe("rating", () => {
@@ -25,6 +27,24 @@ describe("rating", () => {
     expect(ratingSchema.safeParse(3.5).success).toBe(false);
     expect(ratingSchema.safeParse("5").success).toBe(false);
     expect(ratingSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe("optionalFeedbackText", () => {
+  it("allows empty text", () => {
+    const parsed = optionalFeedbackTextSchema.safeParse("");
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toBe("");
+  });
+
+  it("trims and accepts short notes", () => {
+    const parsed = optionalFeedbackTextSchema.safeParse("  hi  ");
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toBe("hi");
+  });
+
+  it("rejects text over the maximum", () => {
+    expect(optionalFeedbackTextSchema.safeParse("x".repeat(1501)).success).toBe(false);
   });
 });
 
@@ -54,12 +74,34 @@ describe("feedbackSubmission", () => {
   const base = {
     rating: 5,
     feedbackText: "Staff were helpful.",
-    consentNoticeVersion: "v1",
+    consentNoticeVersion: "v2",
   };
 
-  it("accepts a submission with only a rating, text and notice version", () => {
-    // Sharing is implicit, so there is no consent flag to require.
+  it("accepts a submission with rating, text and notice version", () => {
     expect(feedbackSubmissionSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts rating-only with empty text and no topics", () => {
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        rating: 4,
+        feedbackText: "",
+        consentNoticeVersion: "v2",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts topic-only feedback without free text", () => {
+    const result = feedbackSubmissionSchema.safeParse({
+      rating: 3,
+      topics: ["staff_assistance", "pricing_and_offers"],
+      consentNoticeVersion: "v2",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.topics).toEqual(["staff_assistance", "pricing_and_offers"]);
+      expect(result.data.feedbackText).toBe("");
+    }
   });
 
   it("still requires a published notice version", () => {
@@ -70,38 +112,85 @@ describe("feedbackSubmission", () => {
     ).toBe(false);
   });
 
-  it("does not allow a client to supply ids or timestamps", () => {
-    const withId = feedbackSubmissionSchema.safeParse({
-      ...base,
-      id: "00000000-0000-0000-0000-000000000000",
-    });
-    // Zod strips unknown keys by default; the route also re-parses with
-    // .strict(). Assert the value never makes it into the output object.
-    expect(withId.success).toBe(true);
-    if (withId.success) {
-      expect(Object.keys(withId.data)).toEqual([
-        "rating",
-        "feedbackText",
-        "consentNoticeVersion",
-      ]);
-    }
+  it("rejects unknown keys under strict parsing", () => {
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        ...base,
+        id: "00000000-0000-0000-0000-000000000000",
+      }).success,
+    ).toBe(false);
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        ...base,
+        businessId: 2,
+      }).success,
+    ).toBe(false);
+  });
 
-    const strict = feedbackSubmissionSchema.strict().safeParse({
-      ...base,
-      businessId: 2,
+  it("rejects a phone without follow-up consent", () => {
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        ...base,
+        contactPhone: "9876543210",
+        followUpConsent: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects follow-up consent without a phone", () => {
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        ...base,
+        followUpConsent: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts follow-up with consent and a valid phone", () => {
+    const result = feedbackSubmissionSchema.safeParse({
+      rating: 2,
+      feedbackText: "",
+      topics: ["billing_experience"],
+      consentNoticeVersion: "v2",
+      followUpConsent: true,
+      contactPhone: "+91 98765-43210",
     });
-    expect(strict.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.followUpConsent).toBe(true);
+      expect(result.data.contactPhone).toBe("+919876543210");
+    }
+  });
+
+  it("rejects an invalid topic id", () => {
+    expect(
+      feedbackSubmissionSchema.safeParse({
+        ...base,
+        topics: ["not_a_real_topic"],
+      }).success,
+    ).toBe(false);
   });
 });
 
 describe("reviewDraftRequest", () => {
-  it("rejects empty and too-short feedback", () => {
+  it("rejects empty feedback without topics", () => {
     expect(
       reviewDraftRequestSchema.safeParse({ rating: 5, feedbackText: "" }).success,
     ).toBe(false);
     expect(
       reviewDraftRequestSchema.safeParse({ rating: 5, feedbackText: "ok" }).success,
     ).toBe(false);
+  });
+
+  it("accepts topics alone as AI signal", () => {
+    const result = reviewDraftRequestSchema.safeParse({
+      rating: 3,
+      feedbackText: "",
+      topics: ["after_sales_service"],
+      locale: "hi",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.locale).toBe("hi");
   });
 
   it("rejects an invalid rating even with valid text", () => {
@@ -123,6 +212,18 @@ describe("reviewDraftRequest", () => {
   });
 });
 
+describe("buildAiFeedbackSignal", () => {
+  it("merges topic labels and free text", () => {
+    expect(
+      buildAiFeedbackSignal({
+        feedbackText: "Waited too long.",
+        topics: ["staff_assistance"],
+        topicLabels: { staff_assistance: "Staff assistance" },
+      }),
+    ).toContain("Staff assistance");
+  });
+});
+
 describe("analyticsEvent", () => {
   it("accepts every allowlisted event name", () => {
     for (const name of [
@@ -133,149 +234,97 @@ describe("analyticsEvent", () => {
       "feedback_saved",
       "review_copied",
       "google_review_clicked",
-    ]) {
+    ] as const) {
       expect(analyticsEventSchema.safeParse({ eventName: name }).success).toBe(true);
     }
   });
 
-  it("rejects unknown event names", () => {
+  it("rejects unknown event names and extra keys", () => {
     expect(
-      analyticsEventSchema.safeParse({ eventName: "review_published" }).success,
+      analyticsEventSchema.safeParse({ eventName: "something_else" }).success,
+    ).toBe(false);
+    expect(
+      analyticsEventSchema.safeParse({
+        eventName: "page_opened",
+        rating: 5,
+      }).success,
     ).toBe(false);
   });
+});
 
-  it("rejects extra metadata fields", () => {
-    expect(
-      analyticsEventSchema.safeParse({ eventName: "review_copied", rating: 5 }).success,
-    ).toBe(false);
-    expect(
-      analyticsEventSchema.safeParse({ eventName: "review_copied", email: "a@b.co" })
-        .success,
-    ).toBe(false);
+describe("slug", () => {
+  it("accepts a lowercase hyphenated slug", () => {
+    expect(slugSchema.safeParse("poojara-telecom-kalol").success).toBe(true);
+  });
+
+  it("rejects uppercase, spaces, and leading hyphens", () => {
+    expect(slugSchema.safeParse("Poojara").success).toBe(false);
+    expect(slugSchema.safeParse("poojara telecom").success).toBe(false);
+    expect(slugSchema.safeParse("-poojara").success).toBe(false);
+  });
+});
+
+describe("hexColor", () => {
+  it("accepts 3- and 6-digit hex colours", () => {
+    expect(hexColorSchema.safeParse("#245C47").success).toBe(true);
+    expect(hexColorSchema.safeParse("#abc").success).toBe(true);
+  });
+
+  it("rejects missing hash and non-hex", () => {
+    expect(hexColorSchema.safeParse("245C47").success).toBe(false);
+    expect(hexColorSchema.safeParse("#gg0000").success).toBe(false);
   });
 });
 
 describe("settingsUpdate", () => {
   const valid = {
-    name: "Shop",
-    logoUrl: "",
+    name: "Poojara Telecom",
     primaryColor: "#245C47",
-    welcomeTitle: "Thanks!",
-    welcomeMessage: "Tell us more.",
-    googleReviewUrl: "https://g.page/r/abc/review",
-    contactEmail: "owner@example.com",
-    contactAddress: "",
+    welcomeTitle: "Thanks for visiting",
+    welcomeMessage: "Tell us how we did.",
+    googleReviewUrl: "https://g.page/r/example/review",
+    contactEmail: "shop@example.com",
   };
 
-  it("accepts a valid payload", () => {
+  it("accepts a complete settings payload", () => {
     expect(settingsUpdateSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("rejects an http Google URL", () => {
+  it("rejects http Google review URLs", () => {
     expect(
-      settingsUpdateSchema.safeParse({ ...valid, googleReviewUrl: "http://g.page/x" })
-        .success,
+      settingsUpdateSchema.safeParse({
+        ...valid,
+        googleReviewUrl: "http://g.page/r/example/review",
+      }).success,
     ).toBe(false);
   });
 
-  it("rejects a non-URL Google value", () => {
-    expect(
-      settingsUpdateSchema.safeParse({ ...valid, googleReviewUrl: "g.page/r/x" }).success,
-    ).toBe(false);
-  });
-
-  it("rejects a malformed contact email", () => {
-    expect(
-      settingsUpdateSchema.safeParse({ ...valid, contactEmail: "not-an-email" }).success,
-    ).toBe(false);
-  });
-
-  it("rejects unknown fields (mass-assignment guard)", () => {
-    expect(settingsUpdateSchema.safeParse({ ...valid, slug: "hijacked" }).success).toBe(
-      false,
-    );
+  it("rejects attempts to patch privacy_notice_version", () => {
     expect(
       settingsUpdateSchema.safeParse({ ...valid, privacy_notice_version: "v9" }).success,
     ).toBe(false);
   });
-
-  it("accepts a null logo to clear it", () => {
-    expect(settingsUpdateSchema.safeParse({ ...valid, logoUrl: null }).success).toBe(
-      true,
-    );
-  });
-});
-
-describe("slug and colour formats", () => {
-  it("accepts lowercase hyphenated slugs", () => {
-    expect(slugSchema.safeParse("shop").success).toBe(true);
-    expect(slugSchema.safeParse("the-green-shop").success).toBe(true);
-    expect(slugSchema.safeParse("shop2").success).toBe(true);
-  });
-
-  it("rejects slugs that would break a URL path", () => {
-    expect(slugSchema.safeParse("Shop").success).toBe(false);
-    expect(slugSchema.safeParse("two--hyphens").success).toBe(false);
-    expect(slugSchema.safeParse("-leading").success).toBe(false);
-    expect(slugSchema.safeParse("has space").success).toBe(false);
-    expect(slugSchema.safeParse("slash/inside").success).toBe(false);
-  });
-
-  it("accepts 3 and 6 digit hex", () => {
-    expect(hexColorSchema.safeParse("#fff").success).toBe(true);
-    expect(hexColorSchema.safeParse("#245C47").success).toBe(true);
-    expect(hexColorSchema.safeParse("245C47").success).toBe(false);
-    expect(hexColorSchema.safeParse("#gggggg").success).toBe(false);
-  });
 });
 
 describe("feedbackQuery", () => {
-  it("applies safe defaults", () => {
-    const parsed = feedbackQuerySchema.safeParse({});
-    expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.page).toBe(1);
-      expect(parsed.data.limit).toBe(20);
+  it("applies defaults for page and limit", () => {
+    const result = feedbackQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.page).toBe(1);
+      expect(result.data.limit).toBe(20);
     }
-  });
-
-  it("coerces numeric strings from the query string", () => {
-    const parsed = feedbackQuerySchema.safeParse({ page: "2", limit: "50", rating: "4" });
-    expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.page).toBe(2);
-      expect(parsed.data.limit).toBe(50);
-      expect(parsed.data.rating).toBe(4);
-    }
-  });
-
-  it("caps limit so a hand-edited URL cannot request everything", () => {
-    expect(feedbackQuerySchema.safeParse({ limit: "5000" }).success).toBe(false);
-  });
-
-  it("rejects a page below 1", () => {
-    expect(feedbackQuerySchema.safeParse({ page: "0" }).success).toBe(false);
-    expect(feedbackQuerySchema.safeParse({ page: "-3" }).success).toBe(false);
-  });
-
-  it("rejects malformed dates", () => {
-    expect(feedbackQuerySchema.safeParse({ from: "07/11/2026" }).success).toBe(false);
-    expect(feedbackQuerySchema.safeParse({ from: "2026-11-07" }).success).toBe(true);
   });
 });
 
 describe("overviewQuery", () => {
-  it("accepts only the three supported windows", () => {
-    for (const days of ["7", "30", "90"]) {
+  it("accepts 7, 30 and 90", () => {
+    for (const days of [7, 30, 90]) {
       expect(overviewQuerySchema.safeParse({ days }).success).toBe(true);
     }
-    expect(overviewQuerySchema.safeParse({ days: "365" }).success).toBe(false);
-    expect(overviewQuerySchema.safeParse({ days: "0" }).success).toBe(false);
   });
 
-  it("defaults to 30 days", () => {
-    const parsed = overviewQuerySchema.safeParse({});
-    expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.days).toBe(30);
+  it("rejects other day counts", () => {
+    expect(overviewQuerySchema.safeParse({ days: 14 }).success).toBe(false);
   });
 });

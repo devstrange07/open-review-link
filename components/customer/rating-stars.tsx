@@ -2,26 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
+import type { Messages, StarMeaning } from "@/lib/i18n";
 
 /**
- * Five-star rating.
+ * Five-star rating with visible meaning labels.
  *
  * Implemented as a radiogroup because that is what it is: one choice from five.
- * A row of buttons with no group semantics would leave a screen reader user
- * with five unrelated buttons and no idea one is selected.
- *
  * Keyboard: arrows move and select, Home/End jump to the ends, digits 1-5
- * select directly. Roving tabindex means Tab enters and leaves the group once
- * rather than five times.
+ * select directly. Roving tabindex means Tab enters and leaves the group once.
  */
-
-const RATING_LABELS: Record<number, string> = {
-  1: "1 star",
-  2: "2 stars",
-  3: "3 stars",
-  4: "4 stars",
-  5: "5 stars",
-};
 
 type Props = {
   value: number | null;
@@ -29,12 +18,12 @@ type Props = {
   /**
    * Fired only on a genuine pick (tap, click, Enter/Space) — never for arrow-key
    * navigation, so a keyboard user can move through the row without the caller
-   * acting on every step. This is the "the customer chose" signal.
+   * acting on every step.
    */
   onCommit?: (rating: number) => void;
-  /** Announced under the group; gives the rating a name without colour. */
   describedBy?: string;
   disabled?: boolean;
+  messages: Messages;
 };
 
 export function RatingStars({
@@ -43,12 +32,9 @@ export function RatingStars({
   onCommit,
   describedBy,
   disabled,
+  messages,
 }: Props) {
   const [hovered, setHovered] = useState<number | null>(null);
-  // The star that was just picked. Drives a one-shot pop + ring so the tap
-  // reads as acknowledged before the caller may move the customer on. Kept in
-  // state rather than derived from `value` so it never replays when the step
-  // remounts with a rating already set (draft restore, Back navigation).
   const [pulse, setPulse] = useState<number | null>(null);
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,7 +45,6 @@ export function RatingStars({
     };
   }, []);
 
-  // While tabbing, only the selected star (or the first) is reachable.
   const focusable = value ?? 1;
 
   function commit(rating: number) {
@@ -116,16 +101,16 @@ export function RatingStars({
   return (
     <div
       role="radiogroup"
-      aria-label="How was your experience with us?"
+      aria-label={messages.ratingPrompt}
       aria-describedby={describedBy}
       aria-disabled={disabled || undefined}
-      className="flex items-center justify-center gap-1"
-      // Hover preview is purely decorative; clear it when the pointer leaves
-      // the group so a half-swept row never looks selected.
+      className="flex items-start justify-center gap-0.5 sm:gap-1"
       onPointerLeave={() => setHovered(null)}
     >
-      {[1, 2, 3, 4, 5].map((star) => {
+      {([1, 2, 3, 4, 5] as const).map((star) => {
+        const meaning = messages.starMeanings[star as StarMeaning];
         const isSelected = value !== null && star <= value;
+        const isExact = value === star;
         const isPreview = value === null && hovered !== null && star <= hovered;
         const active = isSelected || isPreview;
 
@@ -138,43 +123,45 @@ export function RatingStars({
             type="button"
             role="radio"
             aria-checked={value === star}
-            aria-label={RATING_LABELS[star]}
+            aria-label={messages.starAriaLabel(star, meaning)}
             tabIndex={star === focusable ? 0 : -1}
             disabled={disabled}
             onClick={() => pick(star)}
             onKeyDown={(event) => handleKeyDown(event, star)}
             onPointerEnter={() => {
-              // Only preview on devices with a real pointer; on touch this fires
-              // during a scroll and leaves a phantom highlight behind.
               if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
                 setHovered(star);
               }
             }}
-            className="pressable relative grid size-14 place-items-center rounded-full disabled:cursor-not-allowed"
+            className="pressable relative flex min-w-[3.25rem] flex-col items-center gap-1 rounded-[var(--radius-control)] px-0.5 py-1 disabled:cursor-not-allowed sm:min-w-[3.5rem]"
           >
-            {/* One-shot ring on the star that was just picked. Sits behind the
-                glyph and unmounts after the pop, so it never replays on a draft
-                restore or when the step remounts. */}
-            {pulse === star ? (
-              <span
+            <span className="relative grid size-14 place-items-center">
+              {pulse === star ? (
+                <span
+                  aria-hidden="true"
+                  className="star-ring pointer-events-none absolute inset-0 rounded-full"
+                />
+              ) : null}
+              <Star
                 aria-hidden="true"
-                className="star-ring pointer-events-none absolute inset-0 rounded-full"
+                strokeWidth={active ? 2.5 : 1.5}
+                className="size-9 star-glyph"
+                style={{
+                  color: active ? "var(--brand)" : "var(--text-muted)",
+                  fill: active ? "var(--brand)" : "transparent",
+                  animation: pulse === star ? "star-pop 260ms var(--ease-back)" : undefined,
+                }}
               />
-            ) : null}
-            <Star
-              aria-hidden="true"
-              // Stroke weight and fill both change, so selection is legible
-              // without relying on colour (and stays legible in greyscale).
-              strokeWidth={active ? 2.5 : 1.5}
-              className="size-9 transition-colors duration-150"
-              style={{
-                color: active ? "var(--brand)" : "var(--text-muted)",
-                fill: active ? "var(--brand)" : "transparent",
-                // Pop only the star that was just picked, and only once per pick.
-                // 260ms so it finishes inside the 300ms advance window.
-                animation: pulse === star ? "star-pop 260ms var(--ease-back)" : undefined,
-              }}
-            />
+            </span>
+            <span
+              className={`star-label max-w-[3.5rem] text-center text-[0.625rem] leading-tight sm:text-[0.6875rem] ${
+                isExact
+                  ? "font-semibold text-[color:var(--brand-ink)]"
+                  : "font-medium text-[color:var(--text-muted)]"
+              }`}
+            >
+              {meaning}
+            </span>
           </button>
         );
       })}

@@ -175,6 +175,18 @@ export function FeedbackTable({
                     scope="col"
                     className="px-4 py-2.5 text-xs font-medium text-[color:var(--text-muted)]"
                   >
+                    Reference
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-2.5 text-xs font-medium text-[color:var(--text-muted)]"
+                  >
+                    Follow-up
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-2.5 text-xs font-medium text-[color:var(--text-muted)]"
+                  >
                     Notice
                   </th>
                 </tr>
@@ -208,6 +220,18 @@ export function FeedbackTable({
                       </span>
                     </td>
                     <td className="px-4 py-3 align-top">
+                      {row.improvementTopics.length > 0 ? (
+                        <ul className="mb-2 flex flex-wrap gap-1">
+                          {row.improvementTopics.map((topic) => (
+                            <li
+                              key={topic}
+                              className="rounded-md bg-[color:var(--brand-soft)] px-1.5 py-0.5 text-[0.6875rem] text-[color:var(--brand-ink)]"
+                            >
+                              {topic.replaceAll("_", " ")}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                       <p className="max-w-prose leading-relaxed text-pretty whitespace-pre-line">
                         {row.feedbackText ?? (
                           <span className="text-[color:var(--text-muted)]">
@@ -215,6 +239,18 @@ export function FeedbackTable({
                           </span>
                         )}
                       </p>
+                    </td>
+                    <td className="px-4 py-3 align-top font-mono text-xs text-[color:var(--text-muted)]">
+                      {row.publicReference}
+                    </td>
+                    <td className="px-4 py-3 align-top text-xs text-[color:var(--text-muted)]">
+                      {row.followUpConsent ? (
+                        <span className="text-[color:var(--text)]">
+                          {row.contactPhone ?? "Requested"}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 align-top text-xs whitespace-nowrap text-[color:var(--text-muted)]">
                       {row.consentNoticeVersion}

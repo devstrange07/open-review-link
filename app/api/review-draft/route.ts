@@ -2,6 +2,7 @@ import { sanitizeReviewOutput } from "@/lib/ai/sanitize";
 import { requestReviewDraft } from "@/lib/ai/provider";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getBusinessSettings } from "@/lib/settings";
+import { getMessages } from "@/lib/i18n";
 import {
   apiError,
   apiOk,
@@ -10,7 +11,11 @@ import {
   readJsonBody,
   toErrorResponse,
 } from "@/lib/http";
-import { reviewDraftRequestSchema, firstIssueMessage } from "@/lib/validation";
+import {
+  buildAiFeedbackSignal,
+  firstIssueMessage,
+  reviewDraftRequestSchema,
+} from "@/lib/validation";
 
 /**
  * POST /api/review-draft
@@ -18,17 +23,11 @@ import { reviewDraftRequestSchema, firstIssueMessage } from "@/lib/validation";
  * Generates an AI-assisted draft. The customer's text is used transiently:
  * it goes to the provider, comes back as a draft, and is never written to the
  * database and never logged.
- *
- * Failure policy: every branch returns a friendly message and a stable code.
- * The customer's original text lives in their browser, so nothing is lost.
  */
 export async function POST(request: Request) {
   const originError = guardOrigin(request);
   if (originError) return originError;
 
-  // Size and content-type are checked before the rate limiter on purpose: an
-  // abusive caller sending 20MB bodies must not get to consume anyone's budget,
-  // and the cheapest rejection should be the first one.
   const body = await readJsonBody(request);
   if (!body.ok) return body.response;
 
@@ -53,10 +52,20 @@ export async function POST(request: Request) {
       // A config read failure should not block drafting; the generic name works.
     }
 
+    const locale = parsed.data.locale ?? "en";
+    const messages = getMessages(locale);
+    const topics = parsed.data.topics ?? [];
+    const feedbackText = buildAiFeedbackSignal({
+      feedbackText: parsed.data.feedbackText,
+      topics,
+      topicLabels: messages.topics,
+    });
+
     const result = await requestReviewDraft({
       rating: parsed.data.rating,
-      feedbackText: parsed.data.feedbackText,
+      feedbackText,
       shopName,
+      locale,
     });
 
     if (!result.ok) {
@@ -65,16 +74,14 @@ export async function POST(request: Request) {
 
     const sanitized = sanitizeReviewOutput(result.raw);
     if (!sanitized.ok) {
-      // Log the reason, never the text. This is the signal that the prompt or
-      // the model has drifted, and it should be visible in production logs.
       console.warn(`[review-draft] rejected output reason=${sanitized.reason}`);
       return apiError(
         ERROR_CODES.AI_INVALID_OUTPUT,
-        "We couldn't write a review from that text. Try adding a little more detail.",
+        "We couldn't write a review from that text. Try adding a topic or a little more detail.",
       );
     }
 
-    return apiOk({ reviewText: sanitized.text, language: "en" });
+    return apiOk({ reviewText: sanitized.text, language: locale });
   } catch (error) {
     return toErrorResponse(error, "review-draft");
   }

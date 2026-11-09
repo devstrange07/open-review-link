@@ -91,6 +91,10 @@ export type FeedbackRow = {
   feedbackText: string | null;
   consentNoticeVersion: string;
   createdAt: string;
+  publicReference: string;
+  improvementTopics: string[];
+  followUpConsent: boolean;
+  contactPhone: string | null;
 };
 
 export type FeedbackPage = {
@@ -109,6 +113,10 @@ type FeedbackRpcResult = {
     feedback_text: string | null;
     consent_notice_version: string;
     created_at: string;
+    public_reference: string;
+    improvement_topics: string[] | null;
+    follow_up_consent: boolean | null;
+    contact_phone: string | null;
   }>;
 };
 
@@ -167,6 +175,10 @@ export async function getFeedbackPage(params: {
       feedbackText: row.feedback_text,
       consentNoticeVersion: row.consent_notice_version,
       createdAt: row.created_at,
+      publicReference: row.public_reference,
+      improvementTopics: row.improvement_topics ?? [],
+      followUpConsent: Boolean(row.follow_up_consent),
+      contactPhone: row.contact_phone,
     })),
     total,
     page: params.page,

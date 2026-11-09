@@ -1,7 +1,7 @@
 import "server-only";
 import { getServerEnv } from "@/lib/env";
 import { AI_PROVIDER_TIMEOUT_MS, classifyProviderError } from "./model-policy";
-import { SYSTEM_INSTRUCTION, buildUserPrompt, type PromptInput } from "./prompt";
+import { buildSystemInstruction, buildUserPrompt, type PromptInput } from "./prompt";
 
 /**
  * NVIDIA integration.
@@ -105,7 +105,7 @@ export async function attemptNvidiaDraft(
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: SYSTEM_INSTRUCTION },
+          { role: "system", content: buildSystemInstruction(input.locale ?? "en") },
           { role: "user", content: buildUserPrompt(input) },
         ],
         temperature: 0.6,

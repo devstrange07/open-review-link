@@ -1,30 +1,45 @@
 /**
  * Privacy disclosure.
  *
- * Replaces the old consent checkbox. Sharing the written feedback is implicit
- * in using the flow, so there is nothing to tick — but the customer still
- * deserves a quiet cue that their words stay with the shop. One short line
- * with a link to the full notice: informs without eating the fold.
- *
- * Server-rendered, no state: the number of taps to send a review is the whole
- * point of removing the checkbox, and a client component here would put it back.
+ * Sharing private feedback is the customer's decision when they continue the
+ * flow. This quiet line links to the full notice without a checkbox.
  */
 
 type Props = {
   shopName: string;
+  label: string;
 };
 
-export function PrivacyDisclosure({ shopName }: Props) {
+export function PrivacyDisclosure({ shopName, label }: Props) {
+  // shopName kept for callers that compose the short line themselves; label is
+  // the fully translated string (e.g. "Private to X · Privacy notice").
+  void shopName;
+  // Prefer splitting so only "Privacy notice" is the link when label contains ·
+  const parts = label.split("·");
+  const before = parts[0]?.trim() ?? label;
+  const linkText = parts[1]?.trim() ?? label;
+
   return (
     <p className="text-center text-xs leading-relaxed text-pretty text-[color:var(--text-muted)]">
-      Private to {shopName}
-      {" · "}
-      <a
-        href="/privacy"
-        className="font-medium underline underline-offset-2 hover:text-[color:var(--text)]"
-      >
-        Privacy notice
-      </a>
+      {parts.length > 1 ? (
+        <>
+          {before}
+          {" · "}
+          <a
+            href="/privacy"
+            className="pressable font-medium underline underline-offset-2 hover:text-[color:var(--text)]"
+          >
+            {linkText}
+          </a>
+        </>
+      ) : (
+        <a
+          href="/privacy"
+          className="pressable font-medium underline underline-offset-2 hover:text-[color:var(--text)]"
+        >
+          {label}
+        </a>
+      )}
     </p>
   );
 }

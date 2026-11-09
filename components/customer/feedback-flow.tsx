@@ -362,6 +362,21 @@ export function FeedbackFlow({ shop }: Props) {
     }
   }, [rating, combinedFeedback, shop.privacyNoticeVersion]);
 
+  /**
+   * Skip AI and take the customer's own words (typed + chips) straight into
+   * the editor. Persist still runs so the shop keeps the feedback even if they
+   * never ask the model for a rewrite.
+   */
+  const continueRaw = useCallback(() => {
+    if (!canGenerate || rating === null || generating) return;
+    setGenerateError(null);
+    setEditorError(null);
+    void persistFeedback();
+    setReviewText(combinedFeedback);
+    focusEditorOnEnter.current = true;
+    pushStep("editor");
+  }, [canGenerate, rating, generating, persistFeedback, combinedFeedback, pushStep]);
+
   const generate = useCallback(async () => {
     if (!canGenerate || rating === null || generating) return;
 
@@ -521,7 +536,11 @@ export function FeedbackFlow({ shop }: Props) {
       data-hydrated={hydrated ? "true" : "false"}
     >
       <main id="main" className="pb-safe-lg mx-auto w-full max-w-md flex-1 px-5 pt-8">
-        <ShopHeader shop={shop} />
+        <ShopHeader
+          shop={shop}
+          size={step === "rate" ? "default" : "compact"}
+          rating={step === "rate" ? null : rating}
+        />
 
         {step === "rate" ? (
           <section key="rate" className="step-enter mt-8">
@@ -566,38 +585,14 @@ export function FeedbackFlow({ shop }: Props) {
         ) : null}
 
         {step === "describe" ? (
-          <section key="describe" className="step-enter mt-8">
-            <div className="step-item mb-6 flex flex-col items-center gap-1">
-              <p id={ratingSummaryId} className="text-sm text-[color:var(--text-muted)]">
-                You rated us {ratingLabel}
-              </p>
-              <div aria-hidden="true" className="flex gap-0.5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <span
-                    key={star}
-                    className="text-lg leading-none"
-                    style={{
-                      color:
-                        rating !== null && star <= rating
-                          ? "var(--brand)"
-                          : "var(--border)",
-                    }}
-                  >
-                    ★
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <h2
-              ref={describeHeading}
-              tabIndex={-1}
-              className="step-item text-xl font-semibold tracking-tight text-pretty outline-none"
-            >
-              Tell us about your experience.
+          <section key="describe" className="step-enter mt-6">
+            {/* sr-only focus target: chips and the textarea explain themselves.
+                Kept focusable so keyboard/SR users land on the new step. */}
+            <h2 ref={describeHeading} tabIndex={-1} className="sr-only outline-none">
+              Tell us about your experience
             </h2>
 
-            <div className="step-item mt-5">
+            <div className="step-item">
               {/* sr-only: it names the chip group for assistive tech; on screen
                   the chips are self-evidently a set of openers. */}
               <p id={quickFillId} className="sr-only">
@@ -625,7 +620,7 @@ export function FeedbackFlow({ shop }: Props) {
                 }}
                 rows={5}
                 maxLength={MAX_FEEDBACK_LENGTH}
-                placeholder="What went well? What could have been better?"
+                placeholder="One thing that stood out…"
                 aria-describedby="feedback-count"
                 className="field resize-none"
                 // The counter below is the authoritative limit display; a native
@@ -645,27 +640,36 @@ export function FeedbackFlow({ shop }: Props) {
               </div>
             </div>
 
-            <div className="step-item mt-4">
-              <PrivacyDisclosure shopName={shop.name} />
-            </div>
-
             {generateError ? (
               <div className="mt-4">
                 <InlineMessage tone="error">{generateError}</InlineMessage>
               </div>
             ) : null}
 
-            <div className="step-item mt-6">
+            <div className="step-item mt-6 flex flex-col gap-2">
               <Button
                 fullWidth
+                onClick={continueRaw}
+                aria-disabled={!canGenerate || generating}
+                className={!canGenerate || generating ? "opacity-50" : ""}
+              >
+                Continue
+              </Button>
+              <Button
+                fullWidth
+                variant="quiet"
                 loading={generating}
                 loadingLabel="Writing your review"
                 onClick={() => void generate()}
                 aria-disabled={!canGenerate}
                 className={!canGenerate ? "opacity-50" : ""}
               >
-                {generating ? "Writing your review" : "Help me write a review"}
+                Help me write a review
               </Button>
+            </div>
+
+            <div className="step-item mt-4">
+              <PrivacyDisclosure shopName={shop.name} />
             </div>
 
             <div className="step-item mt-5 flex flex-col items-center gap-2 border-t border-[color:var(--border)] pt-5">

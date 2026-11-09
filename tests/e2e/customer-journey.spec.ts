@@ -32,6 +32,12 @@ async function gotoShop(page: Page) {
   await expect(page.locator("[data-hydrated]")).toHaveAttribute("data-hydrated", "true");
 }
 
+/** Describe step signal: the feedback box is the first visible control. */
+async function expectDescribeStep(page: Page) {
+  await expect(page.getByLabel(/your feedback/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible();
+}
+
 test.describe("customer journey", () => {
   test.beforeEach(async ({ page }) => {
     // Stub every mutating endpoint before the page loads.
@@ -80,19 +86,18 @@ test.describe("customer journey", () => {
     // exists only so the star pop is visible before the screen swaps. So assert
     // the committed outcome, not `aria-checked`: the star row is already
     // unmounted by the time the next assertion runs, which made this a race.
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
-    await expect(page.getByText(/you rated us 5 stars/i)).toBeVisible();
+    await expectDescribeStep(page);
+    await expect(page.getByText(/you rated us/i)).toHaveCount(0);
 
-    // Step 2: generate is gated until there is enough text.
+    // Step 2: both CTAs are gated until there is enough text.
     const textarea = page.getByLabel(/your feedback/i);
-    await expect(textarea).toBeVisible();
-
+    const continueBtn = page.getByRole("button", { name: /^continue$/i });
     const generate = page.getByRole("button", { name: /help me write a review/i });
+    await expect(continueBtn).toHaveAttribute("aria-disabled", "true");
     await expect(generate).toHaveAttribute("aria-disabled", "true");
 
     await textarea.fill("Staff were helpful and the product quality was good.");
+    await expect(continueBtn).not.toHaveAttribute("aria-disabled", "true");
     await expect(generate).not.toHaveAttribute("aria-disabled", "true");
 
     await generate.click();
@@ -141,6 +146,37 @@ test.describe("customer journey", () => {
     }
   });
 
+  test("Continue keeps the customer's own words without calling AI", async ({ page }) => {
+    let reviewDraftCalls = 0;
+    await page.route("**/api/review-draft", async (route) => {
+      reviewDraftCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          reviewText: "This AI draft must not appear.",
+          language: "en",
+        }),
+      });
+    });
+
+    await gotoShop(page);
+    await page.getByRole("radio", { name: "5 stars" }).click();
+    await expectDescribeStep(page);
+
+    // No trailing stop: buildCombinedFeedback adds one when missing. Using a
+    // sentence that already ends in "." would hide a double-stop bug.
+    const typed = "Staff were helpful and the product quality was good";
+    await page.getByLabel(/your feedback/i).fill(typed);
+    await page.getByRole("button", { name: /^continue$/i }).click();
+
+    const review = page.getByLabel(/your review/i);
+    await expect(review).toBeVisible();
+    await expect(review).toHaveValue(`${typed}.`);
+    expect(reviewDraftCalls).toBe(0);
+  });
+
   test("Google is reachable without rating or generating anything", async ({ page }) => {
     await gotoShop(page);
 
@@ -158,9 +194,7 @@ test.describe("customer journey", () => {
 
     await page.getByRole("radio", { name: "1 star" }).click();
     // A tap both records the rating and moves the customer on.
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
     // Identical destination regardless of rating: no rating-based routing.
     await expect(page.getByRole("link", { name: /review us on google/i })).toBeVisible();
@@ -207,9 +241,7 @@ test.describe("customer journey", () => {
 
     await gotoShop(page);
     await page.getByRole("radio", { name: "3 stars" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
     const textarea = page.getByLabel(/your feedback/i);
     const typed = "It was okay but the queue was slow.";
@@ -245,9 +277,7 @@ test.describe("customer journey", () => {
 
     await gotoShop(page);
     await page.getByRole("radio", { name: "4 stars" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
     await page.getByLabel(/your feedback/i).fill("Quick and friendly.");
     await page.getByRole("button", { name: /help me write a review/i }).click();
 
@@ -260,37 +290,37 @@ test.describe("customer journey", () => {
   test("quick-fill chips enable generate with no typing", async ({ page }) => {
     await gotoShop(page);
     await page.getByRole("radio", { name: "5 stars" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
+    const continueBtn = page.getByRole("button", { name: /^continue$/i });
     const generate = page.getByRole("button", { name: /help me write a review/i });
+    await expect(continueBtn).toHaveAttribute("aria-disabled", "true");
     await expect(generate).toHaveAttribute("aria-disabled", "true");
 
     // A confident rating gets appreciative phrasing.
-    const chip = page.getByRole("button", { name: "Friendly and helpful staff" });
+    const chip = page.getByRole("button", { name: "Friendly, helpful staff" });
     await expect(chip).toHaveAttribute("aria-pressed", "false");
     await chip.click();
     await expect(chip).toHaveAttribute("aria-pressed", "true");
 
     // Chips alone are enough: no characters were ever typed.
     await expect(page.getByLabel(/your feedback/i)).toHaveValue("");
+    await expect(continueBtn).not.toHaveAttribute("aria-disabled", "true");
     await expect(generate).not.toHaveAttribute("aria-disabled", "true");
 
-    // A second tap removes it, which disables generate again.
+    // A second tap removes it, which disables both CTAs again.
     await chip.click();
     await expect(chip).toHaveAttribute("aria-pressed", "false");
+    await expect(continueBtn).toHaveAttribute("aria-disabled", "true");
     await expect(generate).toHaveAttribute("aria-disabled", "true");
   });
 
   test("a chip-only submission reaches the editor", async ({ page }) => {
     await gotoShop(page);
     await page.getByRole("radio", { name: "4 stars" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
-    await page.getByRole("button", { name: "Quick service with no waiting" }).click();
+    await page.getByRole("button", { name: "Quick service" }).click();
     await page.getByRole("button", { name: /help me write a review/i }).click();
 
     const review = page.getByLabel(/your review/i);
@@ -301,16 +331,12 @@ test.describe("customer journey", () => {
   test("an unhappy rating gets constructive chips, not praise", async ({ page }) => {
     await gotoShop(page);
     await page.getByRole("radio", { name: "1 star" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
-    await expect(
-      page.getByRole("button", { name: "I had to wait a long time" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Long wait" })).toBeVisible();
     // The appreciative set must not be offered alongside it.
     await expect(
-      page.getByRole("button", { name: "Friendly and helpful staff" }),
+      page.getByRole("button", { name: "Friendly, helpful staff" }),
     ).toHaveCount(0);
   });
 
@@ -321,21 +347,17 @@ test.describe("customer journey", () => {
     // Going back and changing the star rating swaps the chip set; the previously
     // chosen phrase must not linger as an invisible selection.
     await page.getByRole("radio", { name: "5 stars" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Friendly and helpful staff" }).click();
+    await expectDescribeStep(page);
+    await page.getByRole("button", { name: "Friendly, helpful staff" }).click();
 
     // No visible Back control any more: the browser's own Back walks the
     // steps, which is what a phone user expects from a hardware/gesture back.
     await page.evaluate(() => history.back());
     await page.getByRole("radio", { name: "1 star" }).click();
-    await expect(
-      page.getByRole("heading", { name: /tell us about your experience/i }),
-    ).toBeVisible();
+    await expectDescribeStep(page);
 
     await expect(
-      page.getByRole("button", { name: "Friendly and helpful staff" }),
+      page.getByRole("button", { name: "Friendly, helpful staff" }),
     ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: /help me write a review/i }),

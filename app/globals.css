@@ -269,6 +269,38 @@ summary {
 }
 
 /* ==========================================================================
+   Shop header morph
+
+   The header lives outside the remounting step sections so it can shrink in
+   place when the customer leaves the rate step. Transform + opacity only;
+   layout size still snaps via the compact prop so we never animate width/height.
+   ========================================================================== */
+
+.shop-header__logo {
+  transform-origin: center top;
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+
+.shop-header__rating {
+  opacity: 1;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.shop-header--compact .shop-header__logo {
+  /* Visual nudge toward the smaller footprint; the element box is already 40px. */
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-header__logo,
+  .shop-header__rating {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
    Step transitions
 
    Enter 240ms ease-out from a small offset (faster out than in, so the

@@ -433,40 +433,9 @@ summary {
 /* ==========================================================================
    Celebration beats
 
-   The budget for delight is small and reserved: a finished draft and a copied
-   review. Both animate transform + opacity only, and both collapse to a plain
-   fade under reduced motion.
+   The budget for delight is now one beat: a copied review. Transform + opacity
+   only, and it collapses to a plain fade under reduced motion.
    ========================================================================== */
-
-@keyframes badge-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1.12);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes celebrate-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.step-celebrate {
-  animation: celebrate-in 320ms var(--ease-back) both;
-}
 
 @keyframes msg-pop {
   from {
@@ -483,50 +452,6 @@ summary {
   animation: msg-pop 240ms var(--ease-back) both;
 }
 
-/* Three dots that drift up and fade, once. Reused from the loading-dots dot
-   sizing but with its own short, non-looping motion. */
-.sparkle {
-  width: 0;
-  height: 0;
-}
-
-.sparkle-dot {
-  position: absolute;
-  width: 0.3rem;
-  height: 0.3rem;
-  border-radius: 9999px;
-  background-color: var(--success);
-  animation: sparkle-up 640ms var(--ease-out) both;
-}
-
-.sparkle-dot:nth-child(1) {
-  left: -0.75rem;
-  animation-delay: 40ms;
-}
-.sparkle-dot:nth-child(2) {
-  left: 0;
-  animation-delay: 120ms;
-}
-.sparkle-dot:nth-child(3) {
-  left: 0.75rem;
-  animation-delay: 200ms;
-}
-
-@keyframes sparkle-up {
-  0% {
-    opacity: 0;
-    transform: translateY(0.25rem) scale(0.6);
-  }
-  35% {
-    opacity: 1;
-    transform: translateY(-0.35rem) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-1rem) scale(0.8);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   @keyframes star-pop {
     from {
@@ -540,14 +465,8 @@ summary {
     animation: none;
     opacity: 0;
   }
-  .step-celebrate,
   .msg-pop {
     animation: none;
-  }
-  /* The sparkle is pure decoration; reduced motion removes it entirely rather
-     than holding a frozen dot on screen. */
-  .sparkle {
-    display: none;
   }
 }
 

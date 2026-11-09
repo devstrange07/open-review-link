@@ -75,14 +75,15 @@ test.describe("customer journey", () => {
     );
 
     await page.getByRole("radio", { name: "5 stars" }).click();
-    await expect(page.getByRole("radio", { name: "5 stars" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
 
+    // The tap both commits the rating and advances the step — the 300ms delay
+    // exists only so the star pop is visible before the screen swaps. So assert
+    // the committed outcome, not `aria-checked`: the star row is already
+    // unmounted by the time the next assertion runs, which made this a race.
     await expect(
       page.getByRole("heading", { name: /tell us about your experience/i }),
     ).toBeVisible();
+    await expect(page.getByText(/you rated us 5 stars/i)).toBeVisible();
 
     // Step 2: generate is gated until there is enough text.
     const textarea = page.getByLabel(/your feedback/i);
@@ -105,7 +106,9 @@ test.describe("customer journey", () => {
     await review.fill("Edited: friendly staff, good quality.");
     await expect(review).toHaveValue("Edited: friendly staff, good quality.");
 
-    // Copy: grant the permission so the honest success path is exercised.
+    // Copy + Google is now a single action: one tap copies the text and opens
+    // the review page. Both halves are asserted, because a tap that only does
+    // one of them is the failure this merge was meant to prevent.
     // WebKit implements no `clipboard-write` permission and only allows
     // clipboard reads inside a user gesture, so there the fallback path is the
     // one that actually runs — both outcomes are honest, so assert whichever
@@ -113,26 +116,29 @@ test.describe("customer journey", () => {
     const isWebKit = test.info().project.name === "mobile-ios";
 
     if (isWebKit) {
-      await page.getByRole("button", { name: /copy my review/i }).click();
-      // Either the success confirmation or the manual-copy fallback is
-      // acceptable. A silent no-op is the thing that must never happen.
+      const popup = page.waitForEvent("popup");
+      await page.getByRole("button", { name: /copy & open google/i }).click();
+      // One tap must both put the text on the clipboard and open Google. Which
+      // clipboard outcome a headless engine gives is not the point; that the
+      // tap is not a silent no-op is. Scoped to the visible status region, so
+      // the sr-only live region cannot make the locator ambiguous.
       await expect(
-        page.getByText(/review copied!|blocked clipboard access/i),
+        page
+          .locator('div[role="status"]')
+          .filter({ hasText: /review copied|blocked clipboard access/i }),
       ).toBeVisible();
+      expect((await popup).url()).toMatch(/^https:\/\//);
     } else {
       await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-      await page.getByRole("button", { name: /copy my review/i }).click();
+      const popup = page.waitForEvent("popup");
+      await page.getByRole("button", { name: /copy & open google/i }).click();
 
       await expect(page.getByRole("button", { name: /copied/i })).toBeVisible();
+      expect((await popup).url()).toMatch(/^https:\/\//);
 
       const clipboard = await page.evaluate(() => navigator.clipboard.readText());
       expect(clipboard).toBe("Edited: friendly staff, good quality.");
     }
-
-    // The Google handoff opens in a new tab and is not an iframe.
-    const google = page.getByRole("link", { name: /open google reviews/i });
-    await expect(google).toHaveAttribute("target", "_blank");
-    await expect(google).toHaveAttribute("rel", /noopener/);
   });
 
   test("Google is reachable without rating or generating anything", async ({ page }) => {
@@ -147,7 +153,7 @@ test.describe("customer journey", () => {
     await expect(googleLink).toHaveAttribute("target", "_blank");
   });
 
-   test("a 1-star rating still gets the same Google access", async ({ page }) => {
+  test("a 1-star rating still gets the same Google access", async ({ page }) => {
     await gotoShop(page);
 
     await page.getByRole("radio", { name: "1 star" }).click();
@@ -320,7 +326,9 @@ test.describe("customer journey", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "Friendly and helpful staff" }).click();
 
-    await page.getByRole("button", { name: /^back$/i }).click();
+    // No visible Back control any more: the browser's own Back walks the
+    // steps, which is what a phone user expects from a hardware/gesture back.
+    await page.evaluate(() => history.back());
     await page.getByRole("radio", { name: "1 star" }).click();
     await expect(
       page.getByRole("heading", { name: /tell us about your experience/i }),

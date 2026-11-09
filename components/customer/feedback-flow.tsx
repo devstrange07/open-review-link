@@ -545,15 +545,17 @@ function FeedbackFlowInner({ shop }: Props) {
       data-hydrated={hydrated ? "true" : "false"}
       className="mx-auto flex min-h-screen-safe w-full max-w-lg flex-col px-5 pb-safe-lg pt-4"
     >
-      <div className="step-item mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="step-item mb-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-3">
+        <div className="col-span-3 row-start-2 w-full max-w-[22rem] min-w-0 justify-self-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
           <ShopHeader
             shop={shop}
             size={showCompactHeader ? "compact" : "default"}
             rating={showCompactHeader ? rating : null}
           />
         </div>
-        <LanguageSwitcher />
+        <div className="col-span-3 row-start-1 justify-self-end sm:col-span-1 sm:col-start-3 sm:row-start-1">
+          <LanguageSwitcher />
+        </div>
       </div>
 
       <LiveAnnouncer message={announcement} />
@@ -572,7 +574,7 @@ function FeedbackFlowInner({ shop }: Props) {
             </p>
           </div>
 
-          <div className="step-item mt-8">
+          <div className="step-item mt-8 rounded-[var(--radius-card)] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
             <p className="mb-3 text-center text-sm font-medium text-[color:var(--text)]">
               {messages.ratingPrompt}
             </p>
@@ -615,7 +617,7 @@ function FeedbackFlowInner({ shop }: Props) {
             id="improve-heading"
             ref={feedbackHeading}
             tabIndex={-1}
-            className="step-item mt-4 text-xl font-semibold tracking-tight outline-none"
+            className="journey-heading step-item mt-4 text-xl font-semibold tracking-tight outline-none"
           >
             {messages.improveHeading}
           </h2>
@@ -699,7 +701,7 @@ function FeedbackFlowInner({ shop }: Props) {
         <section className="step-enter flex flex-1 flex-col" aria-labelledby="recovery-heading">
           <h2
             id="recovery-heading"
-            className="step-item mt-4 text-xl font-semibold tracking-tight"
+            className="journey-heading step-item mt-4 text-xl font-semibold tracking-tight"
           >
             {messages.recoveryHeading}
           </h2>
@@ -775,7 +777,7 @@ function FeedbackFlowInner({ shop }: Props) {
         <section className="step-enter flex flex-1 flex-col" aria-labelledby="choices-heading">
           <h2
             id="choices-heading"
-            className="step-item mt-4 text-xl font-semibold tracking-tight"
+            className="journey-heading step-item mt-4 text-xl font-semibold tracking-tight"
           >
             {messages.choicesHeading}
           </h2>
@@ -950,11 +952,19 @@ function FeedbackFlowInner({ shop }: Props) {
 
       {step === "done" ? (
         <section className="step-enter flex flex-1 flex-col" aria-labelledby="thanks-heading">
+          <div className="step-item mt-4 flex justify-center">
+            <span
+              aria-hidden="true"
+              className="success-mark grid size-14 place-items-center rounded-2xl border border-[color:color-mix(in_srgb,var(--brand)_18%,var(--border))] bg-[color:var(--brand-soft)] text-[color:var(--brand-ink)]"
+            >
+              <Check className="size-6" strokeWidth={2.25} />
+            </span>
+          </div>
           <h2
             id="thanks-heading"
             ref={doneHeading}
             tabIndex={-1}
-            className="step-item mt-6 text-center text-[length:var(--text-hero)] font-semibold tracking-tight outline-none"
+            className="step-item mt-3 text-center text-[length:var(--text-hero)] font-semibold tracking-tight outline-none"
           >
             {messages.thankYouTitle}
           </h2>
@@ -962,7 +972,7 @@ function FeedbackFlowInner({ shop }: Props) {
             {messages.thankYouBody(shop.name)}
           </p>
 
-          <div className="step-item mt-8 rounded-[var(--radius-card)] border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+          <div className="step-item brand-card mt-8 rounded-[var(--radius-card)] border p-4">
             <h3 className="text-sm font-semibold">{messages.whatHappensNext}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-[color:var(--text-muted)] text-pretty">
               {messages.whatHappensNextBody}

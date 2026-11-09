@@ -33,14 +33,14 @@ export const hi: Messages = {
   choicesHeading: "क्या आप सार्वजनिक समीक्षा छोड़ना चाहेंगे?",
   choicesHint:
     "Google समीक्षा वैकल्पिक है। आपकी निजी प्रतिक्रिया पहले से दुकान की मदद करती है।",
-  leaveGoogleReview: "Google पर समीक्षा दें",
-  helpWriteReview: "समीक्षा लिखने में मदद करें",
-  finishWithoutReview: "बिना सार्वजनिक समीक्षा के समाप्त करें",
+  leaveGoogleReview: "Google पर समीक्षा लिखें",
+  helpWriteReview: "समीक्षा का मसौदा बनाएं",
+  finishWithoutReview: "समीक्षा के बिना समाप्त करें",
   aiNeedsDetail: "समीक्षा लिखने के लिए एक विषय या कुछ शब्द जोड़ें।",
   reviewReady: "आपकी समीक्षा तैयार है",
   rewrite: "फिर लिखें",
   rewriting: "फिर लिख रहे हैं…",
-  copyOpenGoogle: "कॉपी करें और Google Reviews खोलें",
+  copyOpenGoogle: "कॉपी करें और Google खोलें",
   copied: "कॉपी हो गया",
   copySuccess: "समीक्षा कॉपी हो गई — इसे Google समीक्षा बॉक्स में चिपकाएँ।",
   clipboardFallback:
@@ -62,7 +62,7 @@ export const hi: Messages = {
   recoveryPhonePlaceholder: "10 अंकों का मोबाइल नंबर",
   recoveryConsent:
     "मैं सहमत हूँ कि दुकान केवल इसी प्रतिक्रिया के बारे में मुझे कॉल या संदेश कर सकती है।",
-  recoverySubmit: "फ़ॉलो-अप का अनुरोध करें",
+  recoverySubmit: "फ़ॉलो-अप माँगें",
   recoverySubmitted: "धन्यवाद — दुकान को आपका अनुरोध मिल गया।",
   recoverySkip: "नहीं, धन्यवाद",
   doneGoogleStillAvailable: "अभी भी Google समीक्षा देना चाहते हैं?",

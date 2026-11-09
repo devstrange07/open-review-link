@@ -33,14 +33,14 @@ export const en: Messages = {
   choicesHeading: "Would you like to leave a public review?",
   choicesHint:
     "A Google review is optional. Your private feedback already helps the shop.",
-  leaveGoogleReview: "Leave a Google review",
-  helpWriteReview: "Help me write a review",
-  finishWithoutReview: "Finish without a public review",
+  leaveGoogleReview: "Write a Google review",
+  helpWriteReview: "Draft a review",
+  finishWithoutReview: "Finish without review",
   aiNeedsDetail: "Add a topic or a few words so we can draft a review.",
   reviewReady: "Your review is ready",
   rewrite: "Rewrite",
   rewriting: "Rewriting…",
-  copyOpenGoogle: "Copy & open Google Reviews",
+  copyOpenGoogle: "Copy & open Google",
   copied: "Copied",
   copySuccess: "Review copied — paste it into the Google review box.",
   clipboardFallback:
@@ -62,7 +62,7 @@ export const en: Messages = {
   recoveryPhonePlaceholder: "10-digit mobile number",
   recoveryConsent:
     "I agree that the shop may call or message me about this feedback only.",
-  recoverySubmit: "Request a follow-up",
+  recoverySubmit: "Request follow-up",
   recoverySubmitted: "Thanks — the shop has your request.",
   recoverySkip: "No thanks",
   doneGoogleStillAvailable: "Still want to leave a Google review?",

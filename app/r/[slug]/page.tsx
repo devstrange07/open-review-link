@@ -63,6 +63,7 @@ export default async function ShopPage({ params }: PageProps) {
 
   return (
     <div
+      className="qr-page"
       style={
         {
           "--brand": palette.brand,

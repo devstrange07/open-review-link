@@ -88,11 +88,32 @@ test.describe("customer journey", () => {
 
     await page.getByRole("button", { name: /^skip$/i }).click();
     await expectChoicesStep(page);
-    await page.getByRole("button", { name: /finish without a public review/i }).click();
+    await page.getByRole("button", { name: /finish without review/i }).click();
 
     await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
+    await expect(page.locator(".success-mark")).toHaveAttribute("aria-hidden", "true");
     await expect(page.getByText("qrfb_e2e_test_reference")).toBeVisible();
     expect(reviewDraftCalls).toBe(0);
+  });
+
+  test("completion cue honors reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await gotoShop(page);
+    await starRadio(page, 5).click();
+    await expectFeedbackStep(page);
+    await page.getByRole("button", { name: /^skip$/i }).click();
+    await expectChoicesStep(page);
+    await page.getByRole("button", { name: /finish without review/i }).click();
+    await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
+
+    const cue = page.locator(".success-mark");
+    await expect(cue).toBeVisible();
+    const motion = await cue.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return { duration: styles.animationDuration, transform: styles.transform };
+    });
+    expect(motion.duration).toBe("0.2s");
+    expect(motion.transform).toBe("none");
   });
 
   test("full path: rate, topics, AI draft, copy, thank-you", async ({ page }) => {
@@ -109,9 +130,9 @@ test.describe("customer journey", () => {
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expectChoicesStep(page);
 
-    await page.getByRole("button", { name: /help me write a review/i }).click();
+    await page.getByRole("button", { name: /draft a review/i }).click();
 
-    const review = page.getByLabel(/your review is ready/i);
+    const review = page.getByRole("textbox", { name: /your review is ready/i });
     await expect(review).toBeVisible();
     await expect(review).toHaveValue(/helpful/i);
 
@@ -131,7 +152,7 @@ test.describe("customer journey", () => {
       await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
       const popup = page.waitForEvent("popup");
       await page.getByRole("button", { name: /copy & open google/i }).click();
-      await expect(page.getByRole("button", { name: /copied/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
       expect((await popup).url()).toMatch(/^https:\/\//);
       const clipboard = await page.evaluate(() => navigator.clipboard.readText());
       expect(clipboard).toBe("Edited: friendly staff, good quality.");
@@ -143,7 +164,7 @@ test.describe("customer journey", () => {
   test("Google is reachable without rating or generating anything", async ({ page }) => {
     await gotoShop(page);
 
-    const googleLink = page.getByRole("link", { name: /leave a google review/i });
+    const googleLink = page.getByRole("link", { name: /write a google review/i });
     await expect(googleLink).toBeVisible();
     const href = await googleLink.getAttribute("href");
     expect(href).toMatch(/^https:\/\//);
@@ -155,7 +176,9 @@ test.describe("customer journey", () => {
 
     await starRadio(page, 1).click();
     await expectFeedbackStep(page);
-    await expect(page.getByRole("link", { name: /leave a google review/i })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /write a google review/i }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: /^skip$/i }).click();
     await expect(
@@ -164,7 +187,9 @@ test.describe("customer journey", () => {
 
     await page.getByRole("button", { name: /no thanks/i }).click();
     await expectChoicesStep(page);
-    await expect(page.getByRole("link", { name: /leave a google review/i })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /write a google review/i }),
+    ).toBeVisible();
   });
 
   test("recovery requires consent before accepting a phone", async ({ page }) => {
@@ -174,11 +199,11 @@ test.describe("customer journey", () => {
     await page.getByRole("button", { name: /^continue$/i }).click();
 
     await page.getByLabel(/phone number/i).fill("9876543210");
-    await page.getByRole("button", { name: /request a follow-up/i }).click();
+    await page.getByRole("button", { name: /request follow-up/i }).click();
     await expect(page.getByText(/confirm we may contact you/i)).toBeVisible();
 
     await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: /request a follow-up/i }).click();
+    await page.getByRole("button", { name: /request follow-up/i }).click();
     await expectChoicesStep(page);
   });
 
@@ -205,7 +230,7 @@ test.describe("customer journey", () => {
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expectChoicesStep(page);
 
-    const help = page.getByRole("button", { name: /help me write a review/i });
+    const help = page.getByRole("button", { name: /draft a review/i });
     await expect(help).toHaveAttribute("aria-disabled", "true");
 
     await page.evaluate(() => history.back());
@@ -222,12 +247,54 @@ test.describe("customer journey", () => {
   test("locale switcher changes visible journey copy", async ({ page }) => {
     await gotoShop(page);
     await expect(page.getByText(/how was your experience/i)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /write a google review/i }),
+    ).toBeVisible();
 
     await page.locator("#locale-select").selectOption("hi");
     await expect(page.getByText(/हमारे साथ आपका अनुभव/i)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Google पर समीक्षा लिखें/ }),
+    ).toBeVisible();
 
     await page.locator("#locale-select").selectOption("gu");
     await expect(page.getByText(/અમારી સાથે તમારો અનુભવ/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /Google પર સમીક્ષા લખો/ })).toBeVisible();
+  });
+
+  test("shop identity stays centered beside the language control", async ({ page }) => {
+    for (const width of [320, 375, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await gotoShop(page);
+
+      const container = await page.locator("[data-hydrated]").boundingBox();
+      const header = await page.locator(".shop-header").boundingBox();
+      const selector = await page.locator("#locale-select").boundingBox();
+      expect(container).not.toBeNull();
+      expect(header).not.toBeNull();
+      expect(selector).not.toBeNull();
+
+      expect(header!.x + header!.width / 2).toBeCloseTo(width / 2, 0);
+      expect(selector!.x + selector!.width).toBeLessThanOrEqual(
+        container!.x + container!.width - 4,
+      );
+
+      await page.locator("#locale-select").selectOption("hi");
+      await page.locator("#locale-select").selectOption("gu");
+      await page
+        .locator(".shop-header > p")
+        .evaluate(
+          (name) =>
+            (name.textContent =
+              "Poojara Telecom Kalol Opposite Bus Stand Long Shop Name Test"),
+        );
+      const shopName = page.locator(".shop-header > p");
+      const localizedHeader = await page.locator(".shop-header").boundingBox();
+      expect(localizedHeader!.x + localizedHeader!.width / 2).toBeCloseTo(width / 2, 0);
+      await expect
+        .poll(() => shopName.evaluate((name) => name.scrollWidth <= name.clientWidth))
+        .toBe(true);
+    }
   });
 
   test("AI failure keeps Google available on choices", async ({ page }) => {
@@ -252,11 +319,13 @@ test.describe("customer journey", () => {
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expectChoicesStep(page);
 
-    await page.getByRole("button", { name: /help me write a review/i }).click();
+    await page.getByRole("button", { name: /draft a review/i }).click();
     await expect(
       page.getByRole("alert").filter({ hasText: /temporarily unavailable/i }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: /leave a google review/i })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /write a google review/i }),
+    ).toBeVisible();
   });
 
   test("the layout does not scroll horizontally at 320px", async ({ page }) => {

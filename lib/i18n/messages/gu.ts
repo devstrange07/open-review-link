@@ -33,14 +33,14 @@ export const gu: Messages = {
   choicesHeading: "શું તમે જાહેર સમીક્ષા આપવા માંગો છો?",
   choicesHint:
     "Google સમીક્ષા વૈકલ્પિક છે. તમારી ખાનગી પ્રતિક્રિયા પહેલેથી દુકાનને મદદ કરે છે.",
-  leaveGoogleReview: "Google પર સમીક્ષા આપો",
-  helpWriteReview: "સમીક્ષા લખવામાં મદદ કરો",
-  finishWithoutReview: "જાહેર સમીક્ષા વગર પૂર્ણ કરો",
+  leaveGoogleReview: "Google પર સમીક્ષા લખો",
+  helpWriteReview: "સમીક્ષાનો ડ્રાફ્ટ બનાવો",
+  finishWithoutReview: "સમીક્ષા વિના પૂર્ણ કરો",
   aiNeedsDetail: "સમીક્ષા લખવા માટે એક વિષય અથવા થોડા શબ્દો ઉમેરો.",
   reviewReady: "તમારી સમીક્ષા તૈયાર છે",
   rewrite: "ફરી લખો",
   rewriting: "ફરી લખી રહ્યા છીએ…",
-  copyOpenGoogle: "કૉપિ કરો અને Google Reviews ખોલો",
+  copyOpenGoogle: "કૉપિ કરો અને Google ખોલો",
   copied: "કૉપિ થયું",
   copySuccess: "સમીક્ષા કૉપિ થઈ — તેને Google સમીક્ષા બૉક્સમાં પેસ્ટ કરો.",
   clipboardFallback:
@@ -62,7 +62,7 @@ export const gu: Messages = {
   recoveryPhonePlaceholder: "10 અંકનો મોબાઇલ નંબર",
   recoveryConsent:
     "હું સંમત છું કે દુકાન ફક્ત આ પ્રતિક્રિયા અંગે મને કૉલ અથવા સંદેશ કરી શકે.",
-  recoverySubmit: "ફૉલો-અપની વિનંતી કરો",
+  recoverySubmit: "ફૉલો-અપ માંગો",
   recoverySubmitted: "આભાર — દુકાનને તમારી વિનંતી મળી ગઈ.",
   recoverySkip: "ના, આભાર",
   doneGoogleStillAvailable: "હજુ પણ Google સમીક્ષા આપવા માંગો છો?",

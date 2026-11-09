@@ -62,7 +62,7 @@ export function ShopHeader({ shop, size = "default", rating = null }: Props) {
         </div>
       )}
       <p
-        className={`font-medium tracking-tight text-[color:var(--text-muted)] ${
+        className={`max-w-full font-medium tracking-tight text-pretty break-words text-[color:var(--text-muted)] ${
           compact ? "text-[0.8125rem]" : "text-[0.9375rem]"
         }`}
       >

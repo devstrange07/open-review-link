@@ -20,7 +20,7 @@ const en: PrivacyCopy = {
   sections: [
     {
       heading: "Who is responsible",
-      body: "The shop named on this page is the data fiduciary for feedback you share here. Hosting and storage are provided by Supabase. Optional rate limiting may use Upstash with a short-lived network address. AI drafting uses NVIDIA NIM as the primary provider and Google Gemini as a fallback — both may process text outside India.",
+      body: "The shop named on this page is the data fiduciary for feedback you share here. Hosting and storage are provided by Supabase. Optional rate limiting may use Upstash with a short-lived network address. AI drafting uses NVIDIA NIM as the primary provider and Google Gemini as a fallback. Both may process text outside India.",
     },
     {
       heading: "What we don’t collect by default",
@@ -29,7 +29,7 @@ const en: PrivacyCopy = {
     {
       heading: "What we process",
       body: [
-        "Star rating (1–5).",
+        "Star rating (1 to 5).",
         "Optional improvement topics you select.",
         "Optional free-text comments you write.",
         "Which version of this notice you were shown, and when.",
@@ -76,7 +76,7 @@ const hi: PrivacyCopy = {
   sections: [
     {
       heading: "ज़िम्मेदारी किसकी है",
-      body: "इस पेज पर नामित दुकान डेटा फिड्यूशरी है। होस्टिंग Supabase पर है। वैकल्पिक रेट लिमिटिंग Upstash का उपयोग कर सकती है। AI ड्राफ्टिंग में NVIDIA NIM (प्राथमिक) और Google Gemini (फ़ॉलबैक) का उपयोग होता है — दोनों भारत के बाहर प्रोसेस कर सकते हैं।",
+      body: "इस पेज पर नामित दुकान डेटा फिड्यूशरी है। होस्टिंग Supabase पर है। वैकल्पिक रेट लिमिटिंग Upstash का उपयोग कर सकती है। AI ड्राफ्टिंग में NVIDIA NIM (प्राथमिक) और Google Gemini (फ़ॉलबैक) का उपयोग होता है। दोनों भारत के बाहर प्रोसेस कर सकते हैं।",
     },
     {
       heading: "डिफ़ॉल्ट रूप से हम क्या नहीं लेते",
@@ -85,7 +85,7 @@ const hi: PrivacyCopy = {
     {
       heading: "हम क्या प्रोसेस करते हैं",
       body: [
-        "स्टार रेटिंग (1–5)।",
+        "स्टार रेटिंग (1 से 5)।",
         "वैकल्पिक सुधार विषय।",
         "वैकल्पिक लिखित टिप्पणी।",
         "आपको दिखाई गई सूचना का संस्करण और समय।",
@@ -132,7 +132,7 @@ const gu: PrivacyCopy = {
   sections: [
     {
       heading: "જવાબદારી કોની છે",
-      body: "આ પેજ પર નામવાળી દુકાન ડેટા ફિડ્યુશિયરી છે. હોસ્ટિંગ Supabase પર છે. વૈકલ્પિક રેટ લિમિટિંગ Upstash વાપરી શકે. AI ડ્રાફ્ટિંગમાં NVIDIA NIM (પ્રાથમિક) અને Google Gemini (ફૉલબૅક) વપરાય છે — બંને ભારત બહાર પ્રોસેસ કરી શકે.",
+      body: "આ પેજ પર નામવાળી દુકાન ડેટા ફિડ્યુશિયરી છે. હોસ્ટિંગ Supabase પર છે. વૈકલ્પિક રેટ લિમિટિંગ Upstash વાપરી શકે. AI ડ્રાફ્ટિંગમાં NVIDIA NIM (પ્રાથમિક) અને Google Gemini (ફૉલબૅક) વપરાય છે. બંને ભારત બહાર પ્રોસેસ કરી શકે.",
     },
     {
       heading: "ડિફૉલ્ટ રીતે અમે શું એકત્રિત નથી કરતા",
@@ -141,7 +141,7 @@ const gu: PrivacyCopy = {
     {
       heading: "અમે શું પ્રોસેસ કરીએ છીએ",
       body: [
-        "સ્ટાર રેટિંગ (1–5).",
+        "સ્ટાર રેટિંગ (1થી 5).",
         "વૈકલ્પિક સુધારાના વિષયો.",
         "વૈકલ્પિક લેખિત ટિપ્પણી.",
         "તમને બતાવેલી સૂચનાનું સંસ્કરણ અને સમય.",

@@ -1,10 +1,6 @@
 /**
  * Review-generation prompt.
  *
- * The system instruction is the spec's text, verbatim, plus one clause on
- * personal information (the spec's test plan calls for feedback containing
- * personal data and gives no other place to handle it).
- *
  * The customer's feedback is untrusted data. It is passed as a delimited block
  * *after* the instructions, and the instruction set explicitly tells the model
  * to treat it as data rather than direction.
@@ -24,7 +20,7 @@ You MUST:
 3. Never turn negative feedback into positive feedback.
 4. Never exaggerate the customer's satisfaction.
 5. Never add promotional language or unsupported business claims.
-6. Avoid repetitive or artificial marketing language.
+6. Use plain punctuation and the customer's own phrasing where possible. Avoid em dashes, stock phrases, and marketing language.
 7. Keep the review natural and written in the first person.
 8. Produce approximately 30-80 words where the supplied information supports it.
 9. Do not pad short feedback with invented details.

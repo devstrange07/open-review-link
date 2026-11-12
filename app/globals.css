@@ -56,6 +56,23 @@
   );
 }
 
+.feedback-storefront {
+  height: clamp(7.5rem, calc(40svh - 7rem), 12rem);
+  background: linear-gradient(#ffb495, #fdd0a4, #fdf3c2);
+}
+
+.feedback-storefront img {
+  mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+}
+
+.feedback-storefront::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2rem;
+  background: linear-gradient(transparent, var(--surface));
+  content: "";
+}
+
 .journey-heading {
   display: flex;
   align-items: stretch;

@@ -27,12 +27,12 @@ export type Messages = {
   leaveGoogleReview: string;
   helpWriteReview: string;
   finishWithoutReview: string;
+  reviewDetailsLabel: string;
   aiNeedsDetail: string;
   reviewReady: string;
   rewrite: string;
   rewriting: string;
   copyOpenGoogle: string;
-  copied: string;
   copySuccess: string;
   clipboardFallback: string;
   generating: string;

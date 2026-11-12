@@ -28,7 +28,7 @@ export default function ErrorBoundary({
     >
       <h1 className="text-xl font-semibold tracking-tight">Something went wrong</h1>
       <p className="mt-2 text-[0.9375rem] leading-relaxed text-pretty text-[color:var(--text-muted)]">
-        The page couldn&rsquo;t load. Your text is still in this browser tab &mdash; try
+        The page couldn&rsquo;t load. Your text is still in this tab. Try
         again before leaving.
       </p>
 

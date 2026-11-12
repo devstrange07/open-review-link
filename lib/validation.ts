@@ -82,7 +82,7 @@ const phoneDigitsSchema = z
   .trim()
   .transform((value) => value.replace(/[\s\-()]/g, ""))
   .refine((value) => /^\+?[0-9]{8,15}$/.test(value), {
-    message: "Enter a valid phone number (8–15 digits).",
+    message: "Enter a valid phone number with 8 to 15 digits.",
   });
 
 /**

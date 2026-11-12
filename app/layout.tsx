@@ -14,10 +14,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: {
-      default: `${name} — Share your experience`,
-      template: `%s — ${name}`,
+      default: `${name} | Share your experience`,
+      template: `%s | ${name}`,
     },
-    description: "Tell us about your visit and share your experience on Google.",
+    description: "Share feedback about your visit or write a Google review.",
     applicationName: name,
     // The QR page is the canonical entry point; nothing here should be indexed
     // under a crawler-friendly "review us" keyword set.
@@ -25,8 +25,8 @@ export async function generateMetadata(): Promise<Metadata> {
     formatDetection: { telephone: false, email: false, address: false },
     openGraph: {
       type: "website",
-      title: `${name} — Share your experience`,
-      description: "Tell us about your visit and share your experience on Google.",
+      title: `${name} | Share your experience`,
+      description: "Share feedback about your visit or write a Google review.",
     },
   };
 }

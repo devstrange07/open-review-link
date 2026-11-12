@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { Check, Copy, Loader2, Sparkles } from "lucide-react";
 import type { PublicShopConfig } from "@/lib/settings";
 import { MAX_FEEDBACK_LENGTH, MIN_FEEDBACK_LENGTH } from "@/lib/validation";
@@ -524,6 +525,7 @@ function FeedbackFlowInner({ shop }: Props) {
 
   const ratingSummaryId = "rating-summary";
   const showCompactHeader = step !== "rate";
+  const showStorefront = /\bpoojara\b/i.test(shop.name);
 
   return (
     <div
@@ -531,13 +533,15 @@ function FeedbackFlowInner({ shop }: Props) {
       className="mx-auto flex min-h-screen-safe w-full max-w-lg flex-col px-5 pb-safe-lg pt-4"
     >
       <div className="step-item mb-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-3">
-        <div className="col-span-3 row-start-2 w-full max-w-[22rem] min-w-0 justify-self-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
-          <ShopHeader
-            shop={shop}
-            size={showCompactHeader ? "compact" : "default"}
-            rating={showCompactHeader ? rating : null}
-          />
-        </div>
+        {(!showStorefront || showCompactHeader) && (
+          <div className="col-span-3 row-start-2 w-full max-w-[22rem] min-w-0 justify-self-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
+            <ShopHeader
+              shop={shop}
+              size={showCompactHeader ? "compact" : "default"}
+              rating={showCompactHeader ? rating : null}
+            />
+          </div>
+        )}
         <div className="col-span-3 row-start-1 justify-self-end sm:col-span-1 sm:col-start-3 sm:row-start-1">
           <LanguageSwitcher />
         </div>
@@ -547,7 +551,7 @@ function FeedbackFlowInner({ shop }: Props) {
 
       {step === "rate" ? (
         <section className="step-enter flex flex-1 flex-col" aria-labelledby="welcome-title">
-          <div className="step-item mt-6">
+          <div className={`step-item ${showStorefront ? "mt-4" : "mt-6"}`}>
             <h1
               id="welcome-title"
               className="text-center text-[length:var(--text-hero)] font-semibold tracking-tight text-pretty"
@@ -559,7 +563,22 @@ function FeedbackFlowInner({ shop }: Props) {
             </p>
           </div>
 
-          <div className="step-item mt-8 rounded-[var(--radius-card)] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
+          {showStorefront ? (
+            <div className="step-item feedback-storefront relative mt-4 -mb-4 flex justify-center overflow-hidden rounded-t-[var(--radius-card)]">
+              <Image
+                src="/poojara-feedback-storefront.webp"
+                alt=""
+                width={880}
+                height={495}
+                unoptimized
+                className="h-full w-auto max-w-full object-contain"
+              />
+            </div>
+          ) : null}
+
+          <div
+            className={`step-item relative rounded-[var(--radius-card)] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5 ${showStorefront ? "" : "mt-8"}`}
+          >
             <p className="mb-3 text-center text-sm font-medium text-[color:var(--text)]">
               {messages.ratingPrompt}
             </p>

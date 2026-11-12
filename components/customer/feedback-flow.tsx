@@ -8,10 +8,10 @@
  * Google review link is available on every step for every rating.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Loader2, Sparkles } from "lucide-react";
 import type { PublicShopConfig } from "@/lib/settings";
-import { MAX_FEEDBACK_LENGTH } from "@/lib/validation";
+import { MAX_FEEDBACK_LENGTH, MIN_FEEDBACK_LENGTH } from "@/lib/validation";
 import { FEEDBACK_TOPIC_IDS, type FeedbackTopicId } from "@/lib/feedback-topics";
 import { RatingStars } from "./rating-stars";
 import { CharacterCounter } from "./character-counter";
@@ -144,6 +144,7 @@ function FeedbackFlowInner({ shop }: Props) {
   const [feedbackText, setFeedbackText] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<FeedbackTopicId[]>([]);
   const [reviewText, setReviewText] = useState("");
+  const [reviewDetails, setReviewDetails] = useState("");
   const [reference, setReference] = useState<string | null>(null);
   const [followUpDone, setFollowUpDone] = useState(false);
 
@@ -163,7 +164,7 @@ function FeedbackFlowInner({ shop }: Props) {
 
   const stepRef = useRef<Step>("rate");
   const draftSaved = useRef(false);
-  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reviewDetailsField = useRef<HTMLTextAreaElement | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusFeedbackOnEnter = useRef(false);
   const feedbackHeading = useRef<HTMLHeadingElement | null>(null);
@@ -324,9 +325,8 @@ function FeedbackFlowInner({ shop }: Props) {
     if (generateError) setGenerateError(null);
   }
 
-  const hasAiSignal = useMemo(() => {
-    return selectedTopics.length > 0 || feedbackText.trim().length >= 5;
-  }, [selectedTopics, feedbackText]);
+  const hasPrivateDraftDetails =
+    selectedTopics.length > 0 || feedbackText.trim().length >= MIN_FEEDBACK_LENGTH;
 
   const persistFeedback = useCallback(
     async (opts?: {
@@ -426,14 +426,20 @@ function FeedbackFlowInner({ shop }: Props) {
     pushStep("choices");
   }
 
-  async function generateReview() {
-    if (rating === null || !hasAiSignal) {
+  async function generateReview(rewrite = false) {
+    if (rating === null || generating) return;
+    const sourceText = rewrite ? reviewText : hasPrivateDraftDetails ? feedbackText : reviewDetails;
+    const topics = rewrite ? [] : selectedTopics;
+    if (sourceText.trim().length < MIN_FEEDBACK_LENGTH && topics.length === 0) {
       setGenerateError(messages.aiNeedsDetail);
+      reviewDetailsField.current?.focus();
       return;
     }
+    const sourceStep = rewrite ? "editor" : "choices";
+    const setError = rewrite ? setEditorError : setGenerateError;
     setGenerating(true);
-    setGenerateError(null);
-    if (!draftSaved.current) void persistFeedback();
+    setError(null);
+    if (!rewrite && !draftSaved.current) void persistFeedback();
 
     try {
       const response = await fetch("/api/review-draft", {
@@ -441,8 +447,8 @@ function FeedbackFlowInner({ shop }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           rating,
-          feedbackText: feedbackText.trim(),
-          topics: selectedTopics,
+          feedbackText: sourceText.trim(),
+          topics,
           locale,
         }),
       });
@@ -452,67 +458,46 @@ function FeedbackFlowInner({ shop }: Props) {
         error?: { message?: string };
       } | null;
 
+      if (stepRef.current !== sourceStep) return;
       if (!response.ok || !payload?.reviewText) {
-        void sendAnalyticsEvent("ai_generation_failed");
-        setGenerateError(payload?.error?.message ?? messages.errorGenerate);
+        if (!rewrite) void sendAnalyticsEvent("ai_generation_failed");
+        setError(payload?.error?.message ?? messages.errorGenerate);
         return;
       }
 
-      void sendAnalyticsEvent("ai_generation_succeeded");
       setReviewText(payload.reviewText);
-      focusEditorOnEnter.current = true;
-      pushStep("editor");
-    } catch {
-      void sendAnalyticsEvent("ai_generation_failed");
-      setGenerateError(messages.errorGenerate);
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function regenerate() {
-    if (rating === null || !hasAiSignal) return;
-    setGenerating(true);
-    setEditorError(null);
-    try {
-      const response = await fetch("/api/review-draft", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          rating,
-          feedbackText: feedbackText.trim(),
-          topics: selectedTopics,
-          locale,
-        }),
-      });
-      const payload = (await response.json().catch(() => null)) as {
-        success?: boolean;
-        reviewText?: string;
-        error?: { message?: string };
-      } | null;
-      if (!response.ok || !payload?.reviewText) {
-        setEditorError(payload?.error?.message ?? messages.errorGenerate);
-        return;
+      setCopyState("idle");
+      if (rewrite) {
+        setAnnouncement(messages.reviewReady);
+      } else {
+        void sendAnalyticsEvent("ai_generation_succeeded");
+        focusEditorOnEnter.current = true;
+        pushStep("editor");
       }
-      setReviewText(payload.reviewText);
-      setAnnouncement(messages.reviewReady);
     } catch {
-      setEditorError(messages.errorGenerate);
+      if (stepRef.current !== sourceStep) return;
+      if (!rewrite) void sendAnalyticsEvent("ai_generation_failed");
+      setError(messages.errorGenerate);
     } finally {
       setGenerating(false);
     }
   }
 
   async function copyAndOpenGoogle() {
+    // Request clipboard access while this tab still has focus and the click
+    // grants activation. Open Google in the same click for popup blockers.
+    const copy = navigator.clipboard?.writeText(reviewText);
     void sendAnalyticsEvent("google_review_clicked");
     window.open(shop.googleReviewUrl, "_blank", "noopener,noreferrer");
 
     try {
-      await navigator.clipboard.writeText(reviewText);
+      if (!copy) {
+        setCopyState("manual");
+        return;
+      }
+      await copy;
       void sendAnalyticsEvent("review_copied");
       setCopyState("copied");
-      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = setTimeout(() => setCopyState("idle"), 2500);
       focusDoneOnEnter.current = true;
       pushStep("done");
     } catch {
@@ -656,14 +641,6 @@ function FeedbackFlowInner({ shop }: Props) {
             </div>
           </div>
 
-          {generateError ? (
-            <div className="step-item mt-3">
-              <InlineMessage tone="error" className="msg-fade">
-                {generateError}
-              </InlineMessage>
-            </div>
-          ) : null}
-
           <div className="step-item mt-6 flex flex-col gap-2">
             <Button
               type="button"
@@ -799,25 +776,34 @@ function FeedbackFlowInner({ shop }: Props) {
                 })();
               }}
             />
+            {!hasPrivateDraftDetails ? (
+              <div>
+                <label htmlFor="review-details" className="mb-1.5 block text-sm font-medium">
+                  {messages.reviewDetailsLabel}
+                </label>
+                <textarea
+                  id="review-details"
+                  ref={reviewDetailsField}
+                  className="field min-h-24 w-full resize-y"
+                  value={reviewDetails}
+                  maxLength={MAX_FEEDBACK_LENGTH}
+                  readOnly={generating}
+                  onChange={(event) => {
+                    setReviewDetails(event.target.value);
+                    if (generateError) setGenerateError(null);
+                  }}
+                />
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="quiet"
               loading={generating}
-              aria-disabled={!hasAiSignal || undefined}
-              className={!hasAiSignal ? "opacity-60" : ""}
-              onClick={() => {
-                if (!hasAiSignal) return;
-                void generateReview();
-              }}
+              onClick={() => void generateReview()}
             >
               <Sparkles aria-hidden="true" className="size-4" />
               {messages.helpWriteReview}
             </Button>
-            {!hasAiSignal ? (
-              <p className="text-center text-xs text-[color:var(--text-muted)]">
-                {messages.aiNeedsDetail}
-              </p>
-            ) : null}
             <Button
               type="button"
               variant="quiet"
@@ -859,6 +845,7 @@ function FeedbackFlowInner({ shop }: Props) {
             <textarea
               className="field min-h-40 w-full resize-y"
               value={reviewText}
+              readOnly={generating}
               onChange={(event) => setReviewText(event.target.value)}
               aria-label={messages.reviewReady}
             />
@@ -874,8 +861,8 @@ function FeedbackFlowInner({ shop }: Props) {
             <button
               type="button"
               className="pressable inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-[color:var(--brand-ink)]"
-              onClick={() => void regenerate()}
-              disabled={generating || !hasAiSignal}
+              onClick={() => void generateReview(true)}
+              disabled={generating || reviewText.trim().length < MIN_FEEDBACK_LENGTH}
             >
               {generating ? (
                 <Loader2 aria-hidden="true" className="spinner size-4" />
@@ -902,31 +889,14 @@ function FeedbackFlowInner({ shop }: Props) {
             </div>
           ) : null}
 
-          {copyState === "copied" ? (
-            <div className="step-item mt-2">
-              <InlineMessage tone="success" className="msg-pop">
-                {messages.copySuccess}
-              </InlineMessage>
-            </div>
-          ) : null}
-
           <div className="step-item mt-6 flex flex-col gap-2">
             <Button
               type="button"
-              variant={copyState === "copied" ? "success" : "primary"}
+              disabled={generating || !reviewText.trim()}
               onClick={() => void copyAndOpenGoogle()}
             >
-              {copyState === "copied" ? (
-                <>
-                  <Check aria-hidden="true" className="size-4" />
-                  {messages.copied}
-                </>
-              ) : (
-                <>
-                  <Copy aria-hidden="true" className="size-4" />
-                  {messages.copyOpenGoogle}
-                </>
-              )}
+              <Copy aria-hidden="true" className="size-4" />
+              {messages.copyOpenGoogle}
             </Button>
             <Button
               type="button"
@@ -940,13 +910,15 @@ function FeedbackFlowInner({ shop }: Props) {
             </Button>
           </div>
 
-          <div className="step-item mt-6 flex justify-center">
-            <GoogleReviewLink
-              href={shop.googleReviewUrl}
-              label={messages.leaveGoogleReview}
-              onNavigate={() => void sendAnalyticsEvent("google_review_clicked")}
-            />
-          </div>
+          {copyState === "manual" || !reviewText.trim() ? (
+            <div className="step-item mt-6 flex justify-center">
+              <GoogleReviewLink
+                href={shop.googleReviewUrl}
+                label={messages.leaveGoogleReview}
+                onNavigate={() => void sendAnalyticsEvent("google_review_clicked")}
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -971,6 +943,12 @@ function FeedbackFlowInner({ shop }: Props) {
           <p className="step-item mt-3 text-center text-[color:var(--text-muted)] text-pretty">
             {messages.thankYouBody(shop.name)}
           </p>
+
+          {copyState === "copied" ? (
+            <InlineMessage tone="success" className="step-item msg-pop mt-4">
+              {messages.copySuccess}
+            </InlineMessage>
+          ) : null}
 
           <div className="step-item brand-card mt-8 rounded-[var(--radius-card)] border p-4">
             <h3 className="text-sm font-semibold">{messages.whatHappensNext}</h3>

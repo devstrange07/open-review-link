@@ -18,7 +18,7 @@ export function TopicChips({ selected, onToggle, messages, disabled }: Props) {
     <div
       role="group"
       aria-label={messages.improveHeading}
-      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+      className="flex flex-wrap gap-1.5"
     >
       {FEEDBACK_TOPIC_IDS.map((id, index) => {
         const isOn = selected.includes(id);
@@ -29,7 +29,7 @@ export function TopicChips({ selected, onToggle, messages, disabled }: Props) {
             aria-pressed={isOn}
             disabled={disabled}
             onClick={() => onToggle(id)}
-            className={`chip pressable chip-enter min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-left text-[0.875rem] font-medium leading-snug ${
+            className={`chip pressable chip-enter min-h-11 max-w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1.5 text-left text-[0.875rem] font-medium leading-snug ${
               isOn ? "chip--selected" : ""
             }`}
             style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}

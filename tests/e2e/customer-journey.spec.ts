@@ -137,6 +137,17 @@ test.describe("customer journey", () => {
     await expect(review).toHaveValue(/helpful/i);
 
     await review.fill("Edited: friendly staff, good quality.");
+    const rewriteRequest = page.waitForRequest("**/api/review-draft");
+    await page.getByRole("button", { name: /^rewrite$/i }).click();
+    expect((await rewriteRequest).postDataJSON()).toMatchObject({
+      feedbackText: "Edited: friendly staff, good quality.",
+      topics: [],
+    });
+    await expect(review).toHaveValue(/helpful/i);
+    await review.fill("Final: friendly staff, good quality.");
+    await page.context().route("https://**", (route) =>
+      route.fulfill({ status: 200, body: "Google Reviews" }),
+    );
 
     const isWebKit = test.info().project.name === "mobile-ios";
     if (isWebKit) {
@@ -144,18 +155,23 @@ test.describe("customer journey", () => {
       await page.getByRole("button", { name: /copy & open google/i }).click();
       await expect(
         page
-          .locator('div[role="status"]')
-          .filter({ hasText: /review copied|blocked clipboard access|could not copy/i }),
+          .locator('div[role="status"], div[role="alert"]')
+          .filter({ hasText: /review copied|could not copy/i }),
       ).toBeVisible();
       expect((await popup).url()).toMatch(/^https:\/\//);
+      if (await page.getByText(/could not copy automatically/i).isVisible()) {
+        await expect(review).toHaveValue("Final: friendly staff, good quality.");
+        return;
+      }
     } else {
       await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
       const popup = page.waitForEvent("popup");
       await page.getByRole("button", { name: /copy & open google/i }).click();
       await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
       expect((await popup).url()).toMatch(/^https:\/\//);
+      await page.bringToFront();
       const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-      expect(clipboard).toBe("Edited: friendly staff, good quality.");
+      expect(clipboard).toBe("Final: friendly staff, good quality.");
     }
 
     await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
@@ -227,21 +243,40 @@ test.describe("customer journey", () => {
     await starRadio(page, 5).click();
     await expectFeedbackStep(page);
 
-    await page.getByRole("button", { name: /^continue$/i }).click();
-    await expectChoicesStep(page);
-
-    const help = page.getByRole("button", { name: /draft a review/i });
-    await expect(help).toHaveAttribute("aria-disabled", "true");
-
-    await page.evaluate(() => history.back());
-    await expectFeedbackStep(page);
-
     const chip = page.getByRole("button", { name: /staff assistance/i });
     await chip.click();
     await expect(chip).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expectChoicesStep(page);
-    await expect(help).not.toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("button", { name: /draft a review/i }).click();
+    await expect(page.getByRole("textbox", { name: /your review is ready/i })).toBeVisible();
+  });
+
+  test("customers can add details for drafting after skipping private feedback", async ({ page }) => {
+    await gotoShop(page);
+    await starRadio(page, 5).click();
+    await expectFeedbackStep(page);
+    const feedbackRequest = page.waitForRequest("**/api/feedback");
+    await page.getByRole("button", { name: /^skip$/i }).click();
+    expect((await feedbackRequest).postDataJSON()).toMatchObject({ feedbackText: "", topics: [] });
+    await expectChoicesStep(page);
+
+    const details = page.getByRole("textbox", { name: /about your experience for the review draft/i });
+    const draft = page.getByRole("button", { name: /draft a review/i });
+    await draft.click();
+    await expect(details).toBeFocused();
+    await expect(
+      page.getByRole("alert").filter({ hasText: /enter at least five characters/i }),
+    ).toBeVisible();
+
+    await details.fill("I found the charger I needed.");
+    const draftRequest = page.waitForRequest("**/api/review-draft");
+    await draft.click();
+    expect((await draftRequest).postDataJSON()).toMatchObject({
+      feedbackText: "I found the charger I needed.",
+      topics: [],
+    });
+    await expect(page.getByRole("textbox", { name: /your review is ready/i })).toBeVisible();
   });
 
   test("locale switcher changes visible journey copy", async ({ page }) => {
@@ -331,10 +366,17 @@ test.describe("customer journey", () => {
   test("the layout does not scroll horizontally at 320px", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await gotoShop(page);
+    await starRadio(page, 5).click();
+    await expectFeedbackStep(page);
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
+    const chipRows = await page
+      .getByRole("group", { name: /what could we improve/i })
+      .getByRole("button")
+      .evaluateAll((chips) => new Set(chips.map((chip) => (chip as HTMLElement).offsetTop)).size);
+    expect(chipRows).toBeLessThan(7);
   });
 });
